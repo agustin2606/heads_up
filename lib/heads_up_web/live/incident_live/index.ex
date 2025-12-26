@@ -5,7 +5,7 @@ defmodule HeadsUpWeb.IncidentLive.Index do
   import HeadsUpWeb.CustomComponents
 
   def mount(_params, _session, socket) do
-    socket = assign(socket, page_title: "Incidents", incidents: Incidents.list_incidents())
+    socket = stream(socket, :incidents, Incidents.list_incidents())
     {:ok, socket}
   end
 
@@ -18,29 +18,29 @@ defmodule HeadsUpWeb.IncidentLive.Index do
           Thanks for pitching in. {vibe}
         </:tagline>
       </.headline>
-      <div class="incidents">
-        <.incident_card :for={incident <- @incidents} incident={incident} />
+      <div class="incidents" id="incidents" phx-update="stream">
+        <.incident_card :for={{dom_id, incident} <- @streams.incidents} incident={incident} id={dom_id}/>
       </div>
     </div>
     """
   end
 
-  attr :incident, HeadsUp.Incidents.Incident, required: true
+  attr(:incident, HeadsUp.Incidents.Incident, required: true)
 
   def incident_card(assigns) do
     ~H"""
-    <div class="card">
-      <.link navigate={~p"/incidents/#{@incident}"}>
+    <.link navigate={~p"/incidents/#{@incident}"} id={@id}>
+      <div class="card">
         <img src={@incident.image_path} />
-        <h2>{@incident.name}</h2>
+        <h2><%= @incident.name %></h2>
         <div class="details">
           <.badge status={@incident.status} />
           <div class="priority">
-            {@incident.priority}
+            <%= @incident.priority %>
           </div>
         </div>
-      </.link>
-    </div>
+      </div>
+    </.link>
     """
   end
 end
