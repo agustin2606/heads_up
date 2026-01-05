@@ -102,6 +102,7 @@ defmodule Plug.CSRFProtection do
   """
 
   import Plug.Conn
+  require Bitwise
   require Logger
 
   alias Plug.Crypto.KeyGenerator

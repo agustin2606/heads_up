@@ -1,8 +1,10 @@
 if Code.ensure_loaded?(Phoenix.HTML) do
   defimpl Phoenix.HTML.FormData, for: Ecto.Changeset do
     def to_form(changeset, opts) do
-      %{params: params, data: data, action: action} = changeset
-      {action, opts} = Keyword.pop(opts, :action, action)
+      {action, opts} = Keyword.pop_lazy(opts, :action, fn -> changeset.action end)
+      changeset = Map.put(changeset, :action, action)
+
+      %{params: params, data: data} = changeset
       {name, opts} = Keyword.pop(opts, :as)
 
       name = to_string(name || form_for_name(data))

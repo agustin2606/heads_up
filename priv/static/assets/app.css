@@ -1400,6 +1400,38 @@ select {
 
 /* AdminIncidentLive.Index */
 
+.admin-index table a {
+  --tw-text-opacity: 1;
+  color: rgb(2 132 199 / var(--tw-text-opacity));
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, -webkit-backdrop-filter;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, -webkit-backdrop-filter;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.admin-index table a:hover {
+  --tw-text-opacity: 1;
+  color: rgb(7 89 133 / var(--tw-text-opacity));
+}
+
+.admin-index table a:focus {
+  text-decoration-line: underline;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.admin-index .joke {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 0.75rem;
+  --tw-bg-opacity: 1;
+  background-color: rgb(255 237 213 / var(--tw-bg-opacity));
+  padding: 1rem;
+  --tw-text-opacity: 1;
+  color: rgb(234 88 12 / var(--tw-text-opacity));
+}
+
 /* AdminIncidentLive.Form */
 
 #incident-form .entry .progress {
@@ -1487,6 +1519,51 @@ select {
 
 .button:active {
   color: rgb(255 255 255 / 0.8);
+}
+
+.spinner {
+  height: 2.5rem;
+  width: 2.5rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  border-radius: 9999px;
+  border-width: 8px;
+  border-color: rgb(209 213 219 / var(--tw-border-opacity));
+  --tw-border-opacity: 1;
+  border-top-color: rgb(56 189 248 / var(--tw-border-opacity));
+}
+
+.loading {
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.failed {
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: center;
+  border-radius: 0.375rem;
+  border-width: 2px;
+  border-style: dashed;
+  --tw-border-opacity: 1;
+  border-color: rgb(254 202 202 / var(--tw-border-opacity));
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  --tw-text-opacity: 1;
+  color: rgb(153 27 27 / var(--tw-text-opacity));
 }
 
 header :not(button) > a {
@@ -1769,6 +1846,10 @@ ul.presences li .status {
   margin-top: 2.75rem;
 }
 
+.mt-12 {
+  margin-top: 3rem;
+}
+
 .mt-14 {
   margin-top: 3.5rem;
 }
@@ -1787,6 +1868,10 @@ ul.presences li .status {
 
 .mt-4 {
   margin-top: 1rem;
+}
+
+.mt-6 {
+  margin-top: 1.5rem;
 }
 
 .block {
@@ -2416,6 +2501,15 @@ ul.presences li .status {
   --tw-ring-color: rgb(63 63 70 / 0.1);
 }
 
+.blur {
+  --tw-blur: blur(8px);
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+}
+
+.filter {
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+}
+
 .transition {
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, -webkit-backdrop-filter;
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
@@ -2540,6 +2634,10 @@ ul.presences li .status {
   100% {
     transform: translateX(0);
   }
+}
+
+.only\:block:only-child {
+  display: block;
 }
 
 .hover\:cursor-pointer:hover {

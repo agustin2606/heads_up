@@ -89,7 +89,6 @@ defmodule Ecto.Integration.Migration do
     end
 
     create table(:orders) do
-      add :label, :string
       add :item, :map
       add :items, :map
       add :meta, :map

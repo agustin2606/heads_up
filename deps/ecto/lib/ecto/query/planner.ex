@@ -1441,8 +1441,7 @@ defmodule Ecto.Query.Planner do
     {Enum.reverse(combinations), counter}
   end
 
-  defp validate_json_path!([path_field | rest], field, {:parameterized, {Ecto.Embedded, embed}})
-       when is_binary(path_field) or is_integer(path_field) do
+  defp validate_json_path!([path_field | rest], field, {:parameterized, {Ecto.Embedded, embed}}) do
     case embed do
       %{related: related, cardinality: :one} ->
         unless Enum.any?(related.__schema__(:fields), &(Atom.to_string(&1) == path_field)) do
@@ -1457,26 +1456,6 @@ defmodule Ecto.Query.Planner do
           raise "cannot use `#{path_field}` to refer to an item in `embeds_many`"
         end
 
-        updated_embed = %{embed | cardinality: :one}
-        validate_json_path!(rest, path_field, {:parameterized, {Ecto.Embedded, updated_embed}})
-
-      other ->
-        raise "expected field `#{field}` to be of type embed, got: `#{inspect(other)}`"
-    end
-  end
-
-  defp validate_json_path!([path_field | rest], field, {:parameterized, {Ecto.Embedded, embed}}) do
-    case embed do
-      %{related: _, cardinality: :one} ->
-        # A source field cannot be used to validate whether the next step in the
-        # path exists in the embedded schema, so we stop here. If there is an error
-        # later in the path it will be caught by the driver.
-        :ok
-
-      %{related: _, cardinality: :many} ->
-        # The source field may not be an integer but for the sake of validating
-        # the rest of the path, we assume it is. The error will be caught later
-        # by the driver if it is not.
         updated_embed = %{embed | cardinality: :one}
         validate_json_path!(rest, path_field, {:parameterized, {Ecto.Embedded, updated_embed}})
 
@@ -2199,8 +2178,8 @@ defmodule Ecto.Query.Planner do
       {{:ok, {:struct, _}}, {:fragment, _, _}} ->
         error!(query, "it is not possible to return a struct subset of a fragment")
 
-      {{:ok, {:struct, fields}}, %Ecto.SubQuery{select: select}} ->
-        subquery_select_fields(select, fields, ix, query)
+      {{:ok, {:struct, _}}, %Ecto.SubQuery{}} ->
+        error!(query, "it is not possible to return a struct subset of a subquery")
 
       {{:ok, {_, []}}, {_, _, _}} ->
         error!(
@@ -2261,35 +2240,6 @@ defmodule Ecto.Query.Planner do
       _field, acc ->
         acc
     end)
-  end
-
-  defp subquery_select_fields(select, requested_fields, ix, query) do
-    available_fields = subquery_source_fields(select)
-    requested_fields = List.wrap(requested_fields)
-
-    schema =
-      case select do
-        {:source, {_, schema}, _, _} when not is_nil(schema) -> schema
-
-        _ ->
-          error!(query, "it is not possible to return a struct subset of a subquery that does not return a schema struct")
-      end
-
-    types =
-      Enum.map(requested_fields, fn field ->
-        case subquery_type_for(select, field) do
-          {:ok, type} ->
-            {field, type}
-
-          :error ->
-            error!(query, "field `#{field}` in struct/2 is not available in the subquery. " <>
-                         "Subquery only returns fields: #{inspect(available_fields)}")
-        end
-      end)
-
-    field_exprs = Enum.map(requested_fields, &select_field(&1, ix, :always))
-
-    {{:source, {nil, schema}, nil, types}, field_exprs}
   end
 
   defp select_field(field, ix, writable) do
@@ -2469,8 +2419,6 @@ defmodule Ecto.Query.Planner do
   defp type!(kind, query, expr, schema, field, allow_virtuals? \\ false)
 
   defp type!(_kind, _query, _expr, nil, _field, _allow_virtuals?), do: :any
-
-  defp type!(_kind, _query, _expr, _ix, field, _allow_virtuals?) when is_binary(field), do: :any
 
   defp type!(kind, query, expr, ix, field, allow_virtuals?) when is_integer(ix) do
     case get_source!(kind, query, ix) do

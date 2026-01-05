@@ -13,8 +13,6 @@ defmodule Phoenix.LiveView.JS do
   rich `push` API, for extending the default `phx-` binding pushes with
   options to customize targets, loading states, and additional payload values.
 
-  If you need to trigger these commands via JavaScript, see [JavaScript interoperability](js-interop.md#js-commands).
-
   ## Client Utility Commands
 
   The following utilities are included:
@@ -25,7 +23,6 @@ defmodule Phoenix.LiveView.JS do
     * `set_attribute` - Set an attribute on elements
     * `remove_attribute` - Remove an attribute from elements
     * `toggle_attribute` - Sets or removes element attribute based on attribute presence.
-    * `ignore_attributes` - Marks attributes as ignored, skipping them when patching the DOM.
     * `show` - Show elements, with optional transitions
     * `hide` - Hide elements, with optional transitions
     * `toggle` - Shows or hides elements based on visibility, with optional transitions
@@ -173,39 +170,6 @@ defmodule Phoenix.LiveView.JS do
 
   You can also use `window.addEventListener` to listen to events pushed
   from the server. You can learn more in our [JS interoperability guide](js-interop.md).
-
-  ## Composing JS commands
-
-  All the functions in this module optionally accept an existing `%JS{}` struct as the first argument,
-  allowing you to chain multiple commands, like pushing an event to the server and optimistically hiding
-  a modal:
-
-  ```heex
-  <div id="modal" class="modal">
-    My Modal
-  </div>
-
-  <button phx-click={JS.push("modal-closed") |> JS.remove_class("show", to: "#modal", transition: "fade-out")}>
-    hide modal
-  </button>
-  ```
-
-  Note that the commands themselves are executed on the client in the order they are composed
-  and the client does not wait for a confirmation before executing the next command. If you chain
-  `JS.push(...) |> JS.hide(...)`, since hide is a fully client-side command, it hides immediately
-  after pushing the event, not waiting for the server to respond.
-
-  JS commands interacting with the server are documented as such. If you chain multiple commands that
-  interact with the server, those are also guaranteed to be executed in the order they are composed,
-  since a LiveView can only handle one event at a time. Therefore, if you do something like
-
-  ```elixir
-  JS.push("my-event") |> JS.patch("/my-path?foo=bar")
-  ```
-
-  it is guaranteed that the event will be pushed first and the patch will only be handled after
-  the first event was handled by the LiveView.
-
   '''
   alias Phoenix.LiveView.JS
 
@@ -239,9 +203,7 @@ defmodule Phoenix.LiveView.JS do
       phx:page-loading-stop events for this push. Defaults to `false`.
     * `:value` - A map of values to send to the server. These values will be
       merged over any `phx-value-*` attributes that are present on the element.
-      All keys will be treated as strings when merging. When used on a form event
-      like `phx-change` or `phx-submit`, the precedence is
-      `JS.push value > phx-value-* > input value`.
+      All keys will be treated as strings when merging.
 
   ## Examples
 
@@ -299,9 +261,6 @@ defmodule Phoenix.LiveView.JS do
       with the client event. The details will be available in the
       `event.detail` attribute for event listeners.
     * `:bubbles` – A boolean flag to bubble the event or not. Defaults to `true`.
-    * `:blocking` - A boolean flag to block the UI until the event handler calls `event.detail.done()`.
-      The done function is injected by LiveView and *must* be called eventually to unblock the UI.
-      This is useful to integrate with third party JavaScript based animation libraries.
 
   ## Examples
 
@@ -319,7 +278,7 @@ defmodule Phoenix.LiveView.JS do
 
   @doc "See `dispatch/2`."
   def dispatch(%JS{} = js, event, opts) do
-    opts = validate_keys(opts, :dispatch, [:to, :detail, :bubbles, :blocking])
+    opts = validate_keys(opts, :dispatch, [:to, :detail, :bubbles])
     args = [event: event, to: opts[:to]]
 
     args =
@@ -333,21 +292,6 @@ defmodule Phoenix.LiveView.JS do
         :error ->
           args
       end
-
-    if opts[:blocking] do
-      case opts[:detail] do
-        map when is_map(map) and (is_map_key(map, "done") or is_map_key(map, :done)) ->
-          raise ArgumentError, """
-          the detail map passed to JS.dispatch must not contain a `done` key
-          when `blocking: true` is used!
-
-          Got: #{inspect(map)}
-          """
-
-        _ ->
-          :ok
-      end
-    end
 
     args =
       case {event, Keyword.fetch(opts, :detail)} do
@@ -366,24 +310,10 @@ defmodule Phoenix.LiveView.JS do
               })
           """
 
-        {_, {:ok, detail}} when is_map(detail) ->
+        {_, {:ok, detail}} ->
           Keyword.put(args, :detail, detail)
 
-        {_, {:ok, detail}} ->
-          raise ArgumentError, """
-          the detail option to JS.dispatch must be a map, got: #{inspect(detail)}
-          """
-
         {_, :error} ->
-          args
-      end
-
-    args =
-      case Keyword.get(opts, :blocking) do
-        true ->
-          Keyword.put(args, :blocking, opts[:blocking])
-
-        _ ->
           args
       end
 
@@ -719,7 +649,7 @@ defmodule Phoenix.LiveView.JS do
   @doc """
   Transitions elements.
 
-    * `transition` - A string of classes to apply during the transition or
+    * `transition` - A string of classes to apply before removing classes or
       a 3-tuple containing the transition class, the class to apply
       to start the transition, and the ending transition class, such as:
       `{"ease-out duration-300", "opacity-0", "opacity-100"}`
@@ -744,7 +674,7 @@ defmodule Phoenix.LiveView.JS do
 
   <div phx-mounted={JS.transition({"ease-out duration-300", "opacity-0", "opacity-100"}, time: 300)}>
       duration-300 milliseconds matches time: 300 milliseconds
-  </div>
+  <div>
   ```
   """
   def transition(transition) when is_binary(transition) or is_tuple(transition) do
@@ -892,63 +822,6 @@ defmodule Phoenix.LiveView.JS do
   def toggle_attribute(%JS{} = js, {attr, val1, val2}, opts) when is_list(opts) do
     opts = validate_keys(opts, :toggle_attribute, [:to])
     put_op(js, "toggle_attr", to: opts[:to], attr: [attr, val1, val2])
-  end
-
-  @doc """
-  Mark attributes as ignored, skipping them when patching the DOM.
-
-  Accepts a single attribute name or a list of attribute names.
-  An asterisk `*` can be used as a wildcard.
-
-  Once set, the given attributes will not be patched across LiveView updates.
-  This includes attributes that are removed by the server.
-
-  If you need to "unmark" an attribute, you need to call `ignore_attributes/1` again
-  with an updated list of attributes.
-
-  This is mostly useful in combination with the `phx-mounted` binding, for example:
-
-  ```heex
-  <dialog phx-mounted={JS.ignore_attributes("open")}>
-    ...
-  </dialog>
-  ```
-
-  > #### A note on the behavior of phx-mounted {: .info}
-  >
-  > The `phx-mounted` binding executes when the LiveView is mounted.
-  > This means that you cannot use `ignore_attributes/1` to retain attributes
-  > that are set on the client during the disconnected render.
-  > `JS.ignore_attributes/0` will only ever ignore future changes from the server.
-
-  ## Options
-
-    * `:to` - An optional DOM selector to select the target element.
-      Defaults to the interacted element. See the `DOM selectors`
-      section for details.
-
-  ## Examples
-
-      JS.ignore_attributes(["open", "data-*"], to: "#my-dialog")
-
-  """
-
-  def ignore_attributes(attrs) when is_list(attrs) or is_binary(attrs),
-    do: ignore_attributes(%JS{}, attrs, [])
-
-  def ignore_attributes(attrs, opts) when (is_list(attrs) or is_binary(attrs)) and is_list(opts),
-    do: ignore_attributes(%JS{}, attrs, opts)
-
-  def ignore_attributes(%JS{} = js, attrs, opts)
-      when (is_list(attrs) or is_binary(attrs)) and is_list(opts) do
-    attrs =
-      case attrs do
-        attr when is_binary(attr) -> [attr]
-        attrs when is_list(attrs) -> attrs
-      end
-
-    opts = validate_keys(opts, :ignore_attributes, [:attrs, :to])
-    put_op(js, "ignore_attrs", to: opts[:to], attrs: attrs)
   end
 
   @doc """

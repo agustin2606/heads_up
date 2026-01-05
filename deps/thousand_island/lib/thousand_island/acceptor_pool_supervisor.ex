@@ -42,13 +42,10 @@ defmodule ThousandIsland.AcceptorPoolSupervisor do
            {Supervisor.sup_flags(),
             [Supervisor.child_spec() | (old_erlang_child_spec :: :supervisor.child_spec())]}}
   def init({server_pid, %ThousandIsland.ServerConfig{num_acceptors: num_acceptors} = config}) do
-    ThousandIsland.ProcessLabel.set(:acceptor_pool_supervisor, config)
+    base_spec = {ThousandIsland.AcceptorSupervisor, {server_pid, config}}
 
     1..num_acceptors
-    |> Enum.map(fn acceptor_id ->
-      child_spec = {ThousandIsland.AcceptorSupervisor, {server_pid, acceptor_id, config}}
-      Supervisor.child_spec(child_spec, id: "acceptor-#{acceptor_id}")
-    end)
+    |> Enum.map(&Supervisor.child_spec(base_spec, id: "acceptor-#{&1}"))
     |> Supervisor.init(strategy: :one_for_one)
   end
 end

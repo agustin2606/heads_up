@@ -6,27 +6,26 @@ defmodule DBConnection.ConnectionPool do
 
   You're not supposed to call any functions on this pool directly, but only pass this
   as the value of the `:pool` option in functions such as `DBConnection.start_link/2`.
-
-  `disconnect_all/3`, which by default will result in connections being
-  reestablished, can be called periodically to recycle checked-in connections
-  after a maximum lifetime is reached. `Ecto SQL` users may find it at
-  https://hexdocs.pm/ecto_sql/Ecto.Adapters.SQL.html#disconnect_all/3
   """
 
   use GenServer
   alias DBConnection.Holder
-  alias DBConnection.Util
 
   @behaviour DBConnection.Pool
 
   @queue_target 50
-  @queue_interval 2000
+  @queue_interval 1000
   @idle_interval 1000
   @time_unit 1000
 
   @doc false
   def start_link({mod, opts}) do
     GenServer.start_link(__MODULE__, {mod, opts}, start_opts(opts))
+  end
+
+  @doc false
+  def child_spec(opts) do
+    super(opts)
   end
 
   @doc false
@@ -53,7 +52,7 @@ defmodule DBConnection.ConnectionPool do
   def init({mod, opts}) do
     DBConnection.register_as_pool(mod)
 
-    queue = :ets.new(__MODULE__.Queue, [:protected, :ordered_set, decentralized_counters: true])
+    queue = :ets.new(__MODULE__.Queue, [:protected, :ordered_set])
     ts = {System.monotonic_time(), 0}
     {:ok, _} = DBConnection.ConnectionPool.Pool.start_supervised(queue, mod, opts)
     target = Keyword.get(opts, :queue_target, @queue_target)
@@ -137,7 +136,7 @@ defmodule DBConnection.ConnectionPool do
   end
 
   def handle_info({:"ETS-TRANSFER", holder, pid, queue}, {_, queue, _, _} = data) do
-    message = "client #{Util.inspect_pid(pid)} exited"
+    message = "client #{inspect(pid)} exited"
     err = DBConnection.ConnectionError.exception(message: message, severity: :info)
     Holder.handle_disconnect(holder, err)
     {:noreply, data}
@@ -176,14 +175,14 @@ defmodule DBConnection.ConnectionPool do
     # Check that timeout refers to current holder (and not previous)
     if Holder.handle_deadline(holder, deadline) do
       message =
-        "client #{Util.inspect_pid(pid)} timed out because " <>
+        "client #{inspect(pid)} timed out because " <>
           "it queued and checked out the connection for longer than #{len}ms"
 
       exc =
         case Process.info(pid, :current_stacktrace) do
           {:current_stacktrace, stacktrace} ->
             message <>
-              "\n\n#{Util.inspect_pid(pid)} was at location:\n\n" <>
+              "\n\n#{inspect(pid)} was at location:\n\n" <>
               Exception.format_stacktrace(stacktrace)
 
           _ ->

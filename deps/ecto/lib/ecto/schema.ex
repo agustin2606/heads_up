@@ -6,25 +6,21 @@ defmodule Ecto.Schema do
   `schema/2` and `embedded_schema/1`.
 
   `schema/2` is typically used to map data from a persisted source,
-  usually a database table, into Elixir structs and vice-versa via
-  the `Ecto.Repo` module. For this reason, the first argument of `schema/2`
-  is the source (table) name. Structs defined with `schema/2` also contain
-  a `__meta__` field with metadata holding the status of the struct,
-  for example, if it has been built, loaded or deleted. Schemas also support
-  associations, through APIs such as `has_one/3` and `belongs_to/3`.
-  Check out the [Associations cheatsheet](associations.cheatmd) for a reference
-  on the different associations types and their migrations.
+  usually a database table, into Elixir structs and vice-versa. For
+  this reason, the first argument of `schema/2` is the source (table)
+  name. Structs defined with `schema/2` also contain a `__meta__` field
+  with metadata holding the status of the struct, for example, if it
+  has been built, loaded or deleted.
 
   On the other hand, `embedded_schema/1` is used for defining schemas
   that are embedded in other schemas or only exist in-memory. For example,
   you can use such schemas to receive data from a command line interface
-  or a contact form, and validate it, without ever persisting it elsewhere.
-  Such structs do not contain a `__meta__` field, as they are never persisted.
+  and validate it, without ever persisting it elsewhere. Such structs
+  do not contain a `__meta__` field, as they are never persisted.
 
-  Both schemas can be used alongside changesets to filter, cast, and validate
-  data. Besides working as data mappers, `embedded_schema/1` and `schema/2`
-  can also be used together to decouple how the data is represented in your
-  applications from the database.
+  Besides working as data mappers, `embedded_schema/1` and `schema/2` can
+  also be used together to decouple how the data is represented in your
+  applications from the database. Let's see some examples.
 
   ## Example
 
@@ -40,7 +36,7 @@ defmodule Ecto.Schema do
       end
 
   By default, a schema will automatically generate a primary key which is named
-  `id` and of type `:integer`. The [`field`](`field/3`) macro defines a field in the schema
+  `id` and of type `:integer`. The `field` macro defines a field in the schema
   with given name and type. `has_many` associates many posts with the user
   schema. Schemas are regular structs and can be created and manipulated directly
   using Elixir's struct API:
@@ -128,10 +124,7 @@ defmodule Ecto.Schema do
   A field marked with `redact: true` will display a value of `**redacted**`
   when inspected in changes inside a `Ecto.Changeset` and be excluded from
   inspect on the schema unless the schema module is tagged with
-  the option `@derive_inspect_for_redacted_fields false`.
-
-  A schema module tagged with `@schema_redact :all_except_primary_keys` will
-  redact all fields except primary keys.
+  the option `@ecto_derive_inspect_for_redacted_fields false`.
 
   ## Schema attributes
 
@@ -158,11 +151,6 @@ defmodule Ecto.Schema do
       which generates structs and queries without context. Context are not used
       by the built-in SQL adapters.
 
-    * `@schema_redact` - If set to `:all_except_primary_keys`, Ecto will
-      treat all non-primary key fields as if they were individually marked
-      as redacted. Defaults to `false`, as no fields are redacted by default.
-      The value set here can be changed per field through the `:redact` option.
-
     * `@foreign_key_type` - configures the default foreign key type
       used by `belongs_to` associations. It must be set in the same
       module that defines the `belongs_to`. Defaults to `:id`;
@@ -173,15 +161,11 @@ defmodule Ecto.Schema do
     * `@derive` - the same as `@derive` available in `Kernel.defstruct/1`
       as the schema defines a struct behind the scenes;
 
-    * `@derive_inspect_for_redacted_fields false` - Ecto will automatically
-      derive the `Inspect` protocol if any redacted fields are set. This option
-      sets it to false;
-
     * `@field_source_mapper` - a function that receives the current field name
       and returns the mapping of this field name in the underlying source.
       In other words, it is a mechanism to automatically generate the `:source`
-      option for the [`field`](`field/3`) macro. It defaults to `fn x -> x end`,
-      where no field transformation is done;
+      option for the `field` macro. It defaults to `fn x -> x end`, where no
+      field transformation is done;
 
   The advantage of configuring the schema via those attributes is
   that they can be set with a macro to configure application wide
@@ -471,10 +455,6 @@ defmodule Ecto.Schema do
   Furthermore, both `__struct__` and `__changeset__` functions are
   defined so structs and changeset functionalities are available.
 
-  The `__schema__` function may accept other values, but those values
-  are not part of the public API. Any values that are not in the list
-  above may change at any time without notice.
-
   ## Working with typespecs
 
   Generating typespecs for schemas is out of the scope of `Ecto.Schema`.
@@ -514,6 +494,13 @@ defmodule Ecto.Schema do
     quote do
       import Ecto.Schema, only: [schema: 2, embedded_schema: 1]
 
+      @primary_key nil
+      @timestamps_opts []
+      @foreign_key_type :id
+      @schema_prefix nil
+      @schema_context nil
+      @field_source_mapper fn x -> x end
+
       Module.register_attribute(__MODULE__, :ecto_primary_keys, accumulate: true)
       Module.register_attribute(__MODULE__, :ecto_fields, accumulate: true)
       Module.register_attribute(__MODULE__, :ecto_virtual_fields, accumulate: true)
@@ -525,6 +512,8 @@ defmodule Ecto.Schema do
       Module.register_attribute(__MODULE__, :ecto_autogenerate, accumulate: true)
       Module.register_attribute(__MODULE__, :ecto_autoupdate, accumulate: true)
       Module.register_attribute(__MODULE__, :ecto_redact_fields, accumulate: true)
+      Module.put_attribute(__MODULE__, :ecto_derive_inspect_for_redacted_fields, true)
+      Module.put_attribute(__MODULE__, :ecto_autogenerate_id, nil)
     end
   end
 
@@ -565,7 +554,7 @@ defmodule Ecto.Schema do
   when calling `c:Ecto.Repo.insert/2` or `c:Ecto.Repo.update/2`.
   """
   defmacro embedded_schema(do: block) do
-    schema(nil, false, :binary_id, block)
+    schema(__CALLER__, nil, false, :binary_id, block)
   end
 
   @doc """
@@ -576,15 +565,64 @@ defmodule Ecto.Schema do
   as value and can be manipulated with the `Ecto.put_meta/2` function.
   """
   defmacro schema(source, do: block) do
-    schema(source, true, :id, block)
+    schema(__CALLER__, source, true, :id, block)
   end
 
-  defp schema(source, meta?, type, block) do
+  defp schema(caller, source, meta?, type, block) do
     prelude =
       quote do
+        if line = Module.get_attribute(__MODULE__, :ecto_schema_defined) do
+          raise "schema already defined for #{inspect(__MODULE__)} on line #{line}"
+        end
+
+        @ecto_schema_defined unquote(caller.line)
+
+        @after_compile Ecto.Schema
+        Module.register_attribute(__MODULE__, :ecto_changeset_fields, accumulate: true)
+        Module.register_attribute(__MODULE__, :ecto_struct_fields, accumulate: true)
+
         meta? = unquote(meta?)
         source = unquote(source)
-        prefix = Ecto.Schema.__schema__(__MODULE__, __ENV__.line, source, meta?, unquote(type))
+        prefix = @schema_prefix
+        context = @schema_context
+
+        # Those module attributes are accessed only dynamically
+        # so we explicitly reference them here to avoid warnings.
+        _ = @foreign_key_type
+        _ = @timestamps_opts
+
+        if meta? do
+          unless is_binary(source) do
+            raise ArgumentError, "schema source must be a string, got: #{inspect(source)}"
+          end
+
+          meta = %Metadata{
+            state: :built,
+            source: source,
+            prefix: prefix,
+            context: context,
+            schema: __MODULE__
+          }
+
+          Module.put_attribute(__MODULE__, :ecto_struct_fields, {:__meta__, meta})
+        end
+
+        if @primary_key == nil do
+          @primary_key {:id, unquote(type), autogenerate: true}
+        end
+
+        primary_key_fields =
+          case @primary_key do
+            false ->
+              []
+
+            {name, type, opts} ->
+              Ecto.Schema.__field__(__MODULE__, name, type, [primary_key: true] ++ opts)
+              [name]
+
+            other ->
+              raise ArgumentError, "@primary_key must be false or {name, type, opts}"
+          end
 
         try do
           import Ecto.Schema
@@ -596,12 +634,69 @@ defmodule Ecto.Schema do
 
     postlude =
       quote unquote: false do
-        {struct_fields, bags_of_clauses} = Ecto.Schema.__schema__(__MODULE__)
-        defstruct struct_fields
+        primary_key_fields = @ecto_primary_keys |> Enum.reverse()
+        autogenerate = @ecto_autogenerate |> Enum.reverse()
+        autoupdate = @ecto_autoupdate |> Enum.reverse()
+        fields = @ecto_fields |> Enum.reverse()
+        query_fields = @ecto_query_fields |> Enum.reverse()
+        virtual_fields = @ecto_virtual_fields |> Enum.reverse()
+        field_sources = @ecto_field_sources |> Enum.reverse()
+        assocs = @ecto_assocs |> Enum.reverse()
+        embeds = @ecto_embeds |> Enum.reverse()
+        redacted_fields = @ecto_redact_fields
+        loaded = Ecto.Schema.__loaded__(__MODULE__, @ecto_struct_fields)
+
+        if redacted_fields != [] and not List.keymember?(@derive, Inspect, 0) and
+             @ecto_derive_inspect_for_redacted_fields do
+          @derive {Inspect, except: @ecto_redact_fields}
+        end
+
+        defstruct Enum.reverse(@ecto_struct_fields)
 
         def __changeset__ do
           %{unquote_splicing(Macro.escape(@ecto_changeset_fields))}
         end
+
+        def __schema__(:prefix), do: unquote(Macro.escape(prefix))
+        def __schema__(:source), do: unquote(source)
+        def __schema__(:fields), do: unquote(Enum.map(fields, &elem(&1, 0)))
+        def __schema__(:query_fields), do: unquote(Enum.map(query_fields, &elem(&1, 0)))
+        def __schema__(:primary_key), do: unquote(primary_key_fields)
+        def __schema__(:hash), do: unquote(:erlang.phash2({primary_key_fields, query_fields}))
+        def __schema__(:read_after_writes), do: unquote(Enum.reverse(@ecto_raw))
+        def __schema__(:autogenerate_id), do: unquote(Macro.escape(@ecto_autogenerate_id))
+        def __schema__(:autogenerate), do: unquote(Macro.escape(autogenerate))
+        def __schema__(:autoupdate), do: unquote(Macro.escape(autoupdate))
+        def __schema__(:loaded), do: unquote(Macro.escape(loaded))
+        def __schema__(:redact_fields), do: unquote(redacted_fields)
+        def __schema__(:virtual_fields), do: unquote(Enum.map(virtual_fields, &elem(&1, 0)))
+
+        def __schema__(:updatable_fields) do
+          unquote(
+            for {name, {_, writable}} <- fields, reduce: {[], []} do
+              {keep, drop} ->
+                case writable do
+                  :always -> {[name | keep], drop}
+                  _ -> {keep, [name | drop]}
+                end
+            end
+          )
+        end
+
+        def __schema__(:insertable_fields) do
+          unquote(
+            for {name, {_, writable}} <- fields, reduce: {[], []} do
+              {keep, drop} ->
+                case writable do
+                  :never -> {keep, [name | drop]}
+                  _ -> {[name | keep], drop}
+                end
+            end
+          )
+        end
+
+        def __schema__(:autogenerate_fields),
+          do: unquote(Enum.flat_map(autogenerate, &elem(&1, 0)))
 
         if meta? do
           def __schema__(:query) do
@@ -614,10 +709,15 @@ defmodule Ecto.Schema do
           end
         end
 
-        def __schema__(:source), do: unquote(source)
-        def __schema__(:prefix), do: unquote(Macro.escape(prefix))
-
-        for clauses <- bags_of_clauses, {args, body} <- clauses do
+        for clauses <-
+              Ecto.Schema.__schema__(
+                fields,
+                field_sources,
+                assocs,
+                embeds,
+                virtual_fields
+              ),
+            {args, body} <- clauses do
           def __schema__(unquote_splicing(args)), do: unquote(body)
         end
 
@@ -726,7 +826,7 @@ defmodule Ecto.Schema do
   """
   defmacro timestamps(opts \\ []) do
     quote bind_quoted: binding() do
-      Ecto.Schema.__define_timestamps__(__MODULE__, opts)
+      Ecto.Schema.__define_timestamps__(__MODULE__, Keyword.merge(@timestamps_opts, opts))
     end
   end
 
@@ -804,11 +904,6 @@ defmodule Ecto.Schema do
       # The comments can come preloaded on the post struct
       [post] = Repo.all(from(p in Post, where: p.id == 42, preload: :comments))
       post.comments #=> [%Comment{...}, ...]
-
-  If using [EctoSQL](https://hexdocs.pm/ecto_sql), the foreign key should be
-  defined in the `comments` table, as shown in `belongs_to/3` examples.
-  You may also see the [Associations cheatsheet](associations.cheatmd)
-  for more examples.
 
   `has_many` can be used to define hierarchical relationships within a single
   schema, for example threaded comments.
@@ -1039,11 +1134,6 @@ defmodule Ecto.Schema do
       # The permalink can come preloaded on the post struct
       [post] = Repo.all(from(p in Post, where: p.id == 42, preload: :permalink))
       post.permalink #=> %Permalink{...}
-
-  If using [EctoSQL](https://hexdocs.pm/ecto_sql), a foreign key must be defined
-  in the `permalinks` and `categories` tables, as shown in `belongs_to/3`
-  examples. You may also see the [Associations cheatsheet](associations.cheatmd)
-  for more examples.
   """
   defmacro has_one(name, schema, opts \\ []) do
     schema = expand_literals(schema, __CALLER__)
@@ -1131,16 +1221,6 @@ defmodule Ecto.Schema do
           belongs_to :post, Post, define_field: false
         end
       end
-
-  If using [EctoSQL](https://hexdocs.pm/ecto_sql), the `comments` table
-  should have a `post_id` column that references the `posts` table.
-  In your migrations, this can be done as:
-
-      add :post_id,
-          references(:posts, on_delete: :delete_all),
-          null: false
-
-  See the [Associations cheatsheet](associations.cheatmd) for more examples.
 
   ## Polymorphic associations
 
@@ -1232,7 +1312,7 @@ defmodule Ecto.Schema do
 
   The third and final option is to use `many_to_many/3` to
   define the relationships between the resources. In this case,
-  the `comments` table won't have the foreign key, instead there
+  the comments table won't have the foreign key, instead there
   is an intermediary table responsible for associating the entries:
 
       defmodule Comment do
@@ -1408,8 +1488,8 @@ defmodule Ecto.Schema do
   include any further columns, as those values won't be set by Ecto:
 
       create table(:posts_tags, primary_key: false) do
-        add :post_id, references(:posts, on_delete: :delete_all), null: false
-        add :tag_id, references(:tags, on_delete: :delete_all), null: false
+        add :post_id, references(:posts)
+        add :tag_id, references(:tags)
       end
 
   However, if your `:join_through` is a schema, like `MyApp.PostTag`, your
@@ -1417,8 +1497,8 @@ defmodule Ecto.Schema do
   including timestamps:
 
       create table(:posts_tags) do
-        add :post_id, references(:posts, on_delete: :delete_all), null: false
-        add :tag_id, references(:tags, on_delete: :delete_all), null: false
+        add :post_id, references(:posts)
+        add :tag_id, references(:tags)
         timestamps()
       end
 
@@ -1587,11 +1667,9 @@ defmodule Ecto.Schema do
   ## Options
 
     * `:primary_key` - The `:primary_key` option can be used with the same arguments
-      as `@primary_key` (see the [Schema attributes](#module-schema-attributes)
-      section for more info). Primary keys are automatically set up for embedded
-      schemas as well, defaulting to `{:id,  :binary_id, autogenerate: true}`.
-      Note `:primary_key`s are not automatically read back on `insert/2`,
-      unless one of `autogenerate: true` or `read_after_writes: true` is set.
+      as `@primary_key` (see the [Schema attributes](https://hexdocs.pm/ecto/Ecto.Schema.html#module-schema-attributes)
+      section for more info). Primary keys are automatically set up for embedded schemas as well,
+      defaulting to  `{:id,  :binary_id, autogenerate:   true}`.
 
     * `:on_replace` - The action taken on associations when the embed is
       replaced when casting or manipulating parent changeset. May be
@@ -1979,6 +2057,14 @@ defmodule Ecto.Schema do
   end
 
   @doc false
+  def __loaded__(module, struct_fields) do
+    case Map.new([{:__struct__, module} | struct_fields]) do
+      %{__meta__: meta} = struct -> %{struct | __meta__: Map.put(meta, :state, :loaded)}
+      struct -> struct
+    end
+  end
+
+  @doc false
   def __field__(mod, name, type, opts) do
     # Check the field type before we check options because it is
     # better to raise unknown type first than unsupported option.
@@ -2002,24 +2088,14 @@ defmodule Ecto.Schema do
     writable = opts[:writable] || :always
     put_struct_field(mod, name, Keyword.get(opts, :default))
 
-    redact_field? =
-      Keyword.get_lazy(opts, :redact, fn ->
-        case Module.get_attribute(mod, :schema_redact, false) do
-          :all_except_primary_keys -> not pk?
-          false -> false
-        end
-      end)
-
-    if redact_field? do
+    if Keyword.get(opts, :redact, false) do
       Module.put_attribute(mod, :ecto_redact_fields, name)
     end
 
     if virtual? do
       Module.put_attribute(mod, :ecto_virtual_fields, {name, type})
     else
-      source =
-        opts[:source] ||
-          Module.get_attribute(mod, :field_source_mapper, &Function.identity/1).(name)
+      source = opts[:source] || Module.get_attribute(mod, :field_source_mapper).(name)
 
       if not is_atom(source) do
         raise ArgumentError,
@@ -2066,8 +2142,7 @@ defmodule Ecto.Schema do
   end
 
   @doc false
-  def __define_timestamps__(mod, opts) do
-    timestamps = Keyword.merge(Module.get_attribute(mod, :timestamps_opts, []), opts)
+  def __define_timestamps__(mod, timestamps) do
     type = Keyword.get(timestamps, :type, :naive_datetime)
     autogen = timestamps[:autogenerate] || {Ecto.Schema, :__timestamps__, [type]}
 
@@ -2146,7 +2221,7 @@ defmodule Ecto.Schema do
     opts = Keyword.put_new(opts, :foreign_key, :"#{name}_id")
 
     foreign_key_name = opts[:foreign_key]
-    foreign_key_type = opts[:type] || Module.get_attribute(mod, :foreign_key_type, :id)
+    foreign_key_type = opts[:type] || Module.get_attribute(mod, :foreign_key_type)
     foreign_key_type = check_field_type!(mod, name, foreign_key_type, opts)
     check_options!(foreign_key_type, opts, @valid_belongs_to_options, "belongs_to/3")
 
@@ -2245,22 +2320,23 @@ defmodule Ecto.Schema do
   ## Quoted callbacks
 
   @doc false
-  def __after_verify__(module) do
+  def __after_compile__(%{module: module} = env, _) do
     # If we are compiling code, we can validate associations now,
     # as the Elixir compiler will solve dependencies.
-    for name <- module.__schema__(:associations) do
-      assoc = module.__schema__(:association, name)
+    if Code.can_await_module_compilation?() do
+      for name <- module.__schema__(:associations) do
+        assoc = module.__schema__(:association, name)
 
-      case assoc.__struct__.after_verify_validation(assoc) do
-        :ok ->
-          :ok
+        case assoc.__struct__.after_compile_validation(assoc, env) do
+          :ok ->
+            :ok
 
-        {:error, message} ->
-          IO.warn(
-            "invalid association `#{assoc.field}` in schema #{inspect(module)}: #{message}",
-            module: module,
-            file: to_string(module.__info__(:compile)[:source] || "nofile")
-          )
+          {:error, message} ->
+            IO.warn(
+              "invalid association `#{assoc.field}` in schema #{inspect(module)}: #{message}",
+              Macro.Env.stacktrace(env)
+            )
+        end
       end
     end
 
@@ -2268,92 +2344,7 @@ defmodule Ecto.Schema do
   end
 
   @doc false
-  def __schema__(module, line, source, meta?, type) do
-    if previous_line = Module.get_attribute(module, :ecto_schema_defined) do
-      raise "schema already defined for #{inspect(module)} on line #{previous_line}"
-    end
-
-    Module.put_attribute(module, :ecto_schema_defined, line)
-
-    if Code.can_await_module_compilation?() do
-      Module.put_attribute(module, :after_verify, Ecto.Schema)
-    end
-
-    Module.register_attribute(module, :ecto_changeset_fields, accumulate: true)
-    Module.register_attribute(module, :ecto_struct_fields, accumulate: true)
-
-    # Those module attributes are accessed only dynamically
-    # so we explicitly reference them here to avoid warnings.
-    Module.get_attribute(module, :foreign_key_type)
-    Module.get_attribute(module, :timestamps_opts)
-
-    prefix = Module.get_attribute(module, :schema_prefix)
-    context = Module.get_attribute(module, :schema_context)
-
-    if meta? do
-      unless is_binary(source) do
-        raise ArgumentError, "schema source must be a string, got: #{inspect(source)}"
-      end
-
-      meta = %Metadata{
-        state: :built,
-        source: source,
-        prefix: prefix,
-        context: context,
-        schema: module
-      }
-
-      Module.put_attribute(module, :ecto_struct_fields, {:__meta__, meta})
-    end
-
-    if Module.get_attribute(module, :primary_key) == nil do
-      Module.put_attribute(module, :primary_key, {:id, type, autogenerate: true})
-    end
-
-    case Module.get_attribute(module, :primary_key) do
-      false ->
-        []
-
-      {name, type, opts} ->
-        Ecto.Schema.__field__(module, name, type, [primary_key: true] ++ opts)
-        [name]
-
-      _other ->
-        raise ArgumentError, "@primary_key must be false or {name, type, opts}"
-    end
-
-    prefix
-  end
-
-  @doc false
-  def __schema__(module) do
-    fields = Module.get_attribute(module, :ecto_fields) |> Enum.reverse()
-    field_sources = Module.get_attribute(module, :ecto_field_sources) |> Enum.reverse()
-    assocs = Module.get_attribute(module, :ecto_assocs) |> Enum.reverse()
-    embeds = Module.get_attribute(module, :ecto_embeds) |> Enum.reverse()
-    virtual_fields = Module.get_attribute(module, :ecto_virtual_fields) |> Enum.reverse()
-    redacted_fields = Module.get_attribute(module, :ecto_redact_fields)
-    primary_key_fields = Module.get_attribute(module, :ecto_primary_keys) |> Enum.reverse()
-    query_fields = Module.get_attribute(module, :ecto_query_fields) |> Enum.reverse()
-    autogenerate = Module.get_attribute(module, :ecto_autogenerate) |> Enum.reverse()
-    autoupdate = Module.get_attribute(module, :ecto_autoupdate) |> Enum.reverse()
-    read_after_writes = Module.get_attribute(module, :ecto_raw) |> Enum.reverse()
-    autogenerate_id = Module.get_attribute(module, :ecto_autogenerate_id)
-
-    struct_fields = Module.get_attribute(module, :ecto_struct_fields) |> Enum.reverse()
-    derive = Module.get_attribute(module, :derive)
-
-    if redacted_fields != [] and not List.keymember?(derive, Inspect, 0) and
-         derive_inspect?(module) do
-      Module.put_attribute(module, :derive, {Inspect, except: redacted_fields})
-    end
-
-    loaded =
-      case Map.new([{:__struct__, module} | struct_fields]) do
-        %{__meta__: meta} = struct -> %{struct | __meta__: Map.put(meta, :state, :loaded)}
-        struct -> struct
-      end
-
+  def __schema__(fields, field_sources, assocs, embeds, virtual_fields) do
     load =
       for {name, {type, _writable}} <- fields do
         if alias = field_sources[name] do
@@ -2397,43 +2388,11 @@ defmodule Ecto.Schema do
 
     embed_names = Enum.map(embeds, &elem(&1, 0))
 
-    updatable =
-      for {name, {_, writable}} <- fields, reduce: {[], []} do
-        {keep, drop} ->
-          case writable do
-            :always -> {[name | keep], drop}
-            _ -> {keep, [name | drop]}
-          end
-      end
-
-    insertable =
-      for {name, {_, writable}} <- fields, reduce: {[], []} do
-        {keep, drop} ->
-          case writable do
-            :never -> {keep, [name | drop]}
-            _ -> {[name | keep], drop}
-          end
-      end
-
     single_arg = [
       {[:dump], dump |> Map.new() |> Macro.escape()},
       {[:load], load |> Macro.escape()},
       {[:associations], assoc_names},
-      {[:embeds], embed_names},
-      {[:updatable_fields], updatable},
-      {[:insertable_fields], insertable},
-      {[:redact_fields], redacted_fields},
-      {[:autogenerate_fields], Enum.flat_map(autogenerate, &elem(&1, 0))},
-      {[:virtual_fields], Enum.map(virtual_fields, &elem(&1, 0))},
-      {[:fields], Enum.map(fields, &elem(&1, 0))},
-      {[:query_fields], Enum.map(query_fields, &elem(&1, 0))},
-      {[:primary_key], primary_key_fields},
-      {[:hash], :erlang.phash2({primary_key_fields, query_fields})},
-      {[:read_after_writes], read_after_writes},
-      {[:autogenerate_id], Macro.escape(autogenerate_id)},
-      {[:autogenerate], Macro.escape(autogenerate)},
-      {[:autoupdate], Macro.escape(autoupdate)},
-      {[:loaded], Macro.escape(loaded)}
+      {[:embeds], embed_names}
     ]
 
     catch_all = [
@@ -2444,32 +2403,15 @@ defmodule Ecto.Schema do
       {[:embed, quote(do: _)], nil}
     ]
 
-    bags_of_clauses =
-      [
-        single_arg,
-        field_sources_quoted,
-        types_quoted,
-        virtual_types_quoted,
-        assoc_quoted,
-        embed_quoted,
-        catch_all
-      ]
-
-    {struct_fields, bags_of_clauses}
-  end
-
-  defp derive_inspect?(module) do
-    case Module.get_attribute(module, :ecto_derive_inspect_for_redacted_fields) do
-      false ->
-        IO.warn(
-          "@ecto_derive_inspect_for_redacted_fields is deprecated, set @derive_inspect_for_redacted_fields instead"
-        )
-
-        false
-
-      _ ->
-        Module.get_attribute(module, :derive_inspect_for_redacted_fields, true)
-    end
+    [
+      single_arg,
+      field_sources_quoted,
+      types_quoted,
+      virtual_types_quoted,
+      assoc_quoted,
+      embed_quoted,
+      catch_all
+    ]
   end
 
   ## Private

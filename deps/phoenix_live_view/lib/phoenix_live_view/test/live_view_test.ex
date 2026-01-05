@@ -179,8 +179,11 @@ defmodule Phoenix.LiveViewTest do
 
   @flash_cookie "__phoenix_flash__"
 
+  require Phoenix.ConnTest
+  require Phoenix.ChannelTest
+
   alias Phoenix.LiveView.{Diff, Socket}
-  alias Phoenix.LiveViewTest.{ClientProxy, DOM, TreeDOM, Element, View, Upload, UploadClient}
+  alias Phoenix.LiveViewTest.{ClientProxy, DOM, Element, View, Upload, UploadClient}
 
   @doc """
   Puts connect params to be used on LiveView connections.
@@ -204,7 +207,7 @@ defmodule Phoenix.LiveViewTest do
 
     * `:on_error` - Can be either `:raise` or `:warn` to control whether
        detected errors like duplicate IDs or live components fail the test or just log
-       a warning. Defaults to `:raise`.
+       a warning. Defaults to `:warn`.
 
   ## Examples
 
@@ -243,7 +246,7 @@ defmodule Phoenix.LiveViewTest do
     * `:session` - the session to be given to the LiveView
     * `:on_error` - Can be either `:raise` or `:warn` to control whether
        detected errors like duplicate IDs or live components fail the test or just log
-       a warning. Defaults to `:raise`.
+       a warning. Defaults to `:warn`.
 
   All other options are forwarded to the LiveView for rendering. Refer to
   `Phoenix.Component.live_render/3` for a list of supported render
@@ -336,7 +339,7 @@ defmodule Phoenix.LiveViewTest do
       end
 
     start_proxy(path, %{
-      response: {:document, Phoenix.ConnTest.response(conn, 200)},
+      response: Phoenix.ConnTest.response(conn, 200),
       connect_params: conn.private[:live_view_connect_params] || %{},
       connect_info: conn.private[:live_view_connect_info] || prune_conn(conn) || %{},
       live_module: live_module,
@@ -344,7 +347,7 @@ defmodule Phoenix.LiveViewTest do
       endpoint: Phoenix.Controller.endpoint_module(conn),
       session: maybe_get_session(conn),
       url: Plug.Conn.request_url(conn),
-      on_error: opts[:on_error] || :raise
+      on_error: opts[:on_error] || :warn
     })
   end
 
@@ -353,7 +356,7 @@ defmodule Phoenix.LiveViewTest do
   end
 
   defp connect_from_static_token(%Plug.Conn{status: redir} = conn, _path, _opts)
-       when redir in [301, 302, 303] do
+       when redir in [301, 302] do
     error_redirect_conn(conn)
   end
 
@@ -501,9 +504,7 @@ defmodule Phoenix.LiveViewTest do
   end
 
   defp rendered_to_diff_string(rendered, socket) do
-    {diff, _, _} =
-      Diff.render(socket, rendered, Diff.new_fingerprints(), Diff.new_components())
-
+    {_, diff, _} = Diff.render(socket, rendered, Diff.new_components())
     diff |> Diff.to_iodata() |> IO.iodata_to_binary()
   end
 
@@ -635,7 +636,7 @@ defmodule Phoenix.LiveViewTest do
              |> element("form")
              |> render_submit(%{deg: 123, avatar: upload}) =~ "123 exceeds limits"
 
-  To submit a form along with some hidden input values:
+  To submit a form along with some with hidden input values:
 
       assert view
              |> form("#term", user: %{name: "hello"})
@@ -936,8 +937,7 @@ defmodule Phoenix.LiveViewTest do
   end
 
   @doc """
-  Awaits all current `assign_async`, `stream_async` and `start_async` tasks
-  for a given LiveView or element.
+  Awaits all current `assign_async` and `start_async` for a given LiveView or element.
 
   It renders the LiveView or Element once complete and returns the result.
   The default `timeout` is [ExUnit](https://hexdocs.pm/ex_unit/ExUnit.html#configure/1)'s
@@ -1069,10 +1069,9 @@ defmodule Phoenix.LiveViewTest do
              |> render() == "Snooze"
   """
   def render(view_or_element) do
-    case render_tree(view_or_element) do
-      {:error, reason} -> {:error, reason}
-      html -> TreeDOM.to_html(html)
-    end
+    view_or_element
+    |> render_tree()
+    |> DOM.to_html()
   end
 
   @doc """
@@ -1250,12 +1249,10 @@ defmodule Phoenix.LiveViewTest do
   end
 
   defp find_cid!(view, selector) do
-    sync_with_root!(view)
-    lazy = call(view, {:get_lazy, view.id})
+    html_tree = view |> render() |> DOM.parse()
 
-    with {:ok, form} <- DOM.maybe_one(lazy, selector),
-         [form] <- DOM.to_tree(form) do
-      [cid | _] = DOM.targets_from_node(lazy, form)
+    with {:ok, form} <- DOM.maybe_one(html_tree, selector) do
+      [cid | _] = DOM.targets_from_node(html_tree, form)
       cid
     else
       {:error, _reason, msg} -> raise ArgumentError, msg
@@ -1462,17 +1459,11 @@ defmodule Phoenix.LiveViewTest do
 
   It returns :ok if the specified redirect isn't already in the mailbox.
 
-  If no path is specified, refutes any redirection on the given view.
-
   ## Examples
 
       render_click(view, :event_that_triggers_redirect_to_path)
       :ok = refute_redirected view, "/wrong_path"
   """
-  def refute_redirected(view) do
-    refute_navigation(view, :redirect, nil)
-  end
-
   def refute_redirected(view, to) when is_binary(to) do
     refute_navigation(view, :redirect, to)
   end
@@ -1487,7 +1478,7 @@ defmodule Phoenix.LiveViewTest do
             "expected #{inspect(view.module)} not to #{kind}, "
           end
 
-        raise ArgumentError, message <> "but got a #{kind} to #{inspect(new_to)}"
+        raise ArgumentError, message <> "but got a #{kind} to #{inspect(to)}"
     after
       0 -> :ok
     end
@@ -1534,12 +1525,12 @@ defmodule Phoenix.LiveViewTest do
     {html, static_path} = call(view_or_element, :html)
 
     head =
-      case TreeDOM.filter(html, fn node -> TreeDOM.tag(node) == "head" end) do
-        [head] -> head
+      case DOM.maybe_one(html, "head") do
+        {:ok, head} -> head
         _ -> {"head", [], []}
       end
 
-    case TreeDOM.attribute(content, "data-phx-main") do
+    case Floki.attribute(content, "data-phx-main") do
       ["true" | _] ->
         # If we are rendering the main LiveView,
         # we return the full page html.
@@ -1552,12 +1543,15 @@ defmodule Phoenix.LiveViewTest do
           {"html", [],
            [
              head,
-             {"body", [], List.wrap(content)}
+             {"body", [],
+              [
+                content
+              ]}
            ]}
         ]
     end
-    |> TreeDOM.walk(fn
-      {"script", _, _} -> []
+    |> Floki.traverse_and_update(fn
+      {"script", _, _} -> nil
       {"a", _, _} = link -> link
       {el, attrs, children} -> {el, maybe_prefix_static_path(attrs, static_path), children}
       el -> el
@@ -1582,7 +1576,7 @@ defmodule Phoenix.LiveViewTest do
   defp prefix_static_path(url, _), do: url
 
   defp write_tmp_html_file(html) do
-    html = TreeDOM.to_html(html)
+    html = Floki.raw_html(html)
     path = Path.join([System.tmp_dir!(), "#{Phoenix.LiveView.Utils.random_id()}.html"])
     File.write!(path, html)
     path
@@ -1812,7 +1806,7 @@ defmodule Phoenix.LiveViewTest do
     static_token = token_func.(root.static_token)
 
     start_proxy(url, %{
-      response: {:fragment, html},
+      response: html,
       live_redirect: {root.id, root_token, static_token},
       connect_params: root.connect_params,
       connect_info: root.connect_info,
@@ -1892,28 +1886,15 @@ defmodule Phoenix.LiveViewTest do
   end
 
   def __render_trigger_submit__(%Element{} = form, name, required_attr, error_msg) do
-    root = call(form, {:get_lazy, form})
-
     case render_tree(form) do
-      {"form", attrs, _child_nodes} = node ->
+      {"form", attrs, _child_nodes} ->
         if not List.keymember?(attrs, required_attr, 0) do
           raise ArgumentError, error_msg <> ", got: #{inspect(attrs)}"
         end
 
         {"action", path} = List.keyfind(attrs, "action", 0) || {"action", call(form, :url)}
         {"method", method} = List.keyfind(attrs, "method", 0) || {"method", "get"}
-
-        form_data =
-          (form.form_data || %{})
-          |> Map.new()
-          |> Phoenix.LiveViewTest.Utils.stringify(&to_string/1)
-
-        values =
-          node
-          |> DOM.collect_form_values(root)
-          |> Map.merge(form_data)
-
-        {method, path, values}
+        {method, path, form.form_data || %{}}
 
       {tag, _, _} ->
         raise ArgumentError,
@@ -2034,29 +2015,12 @@ defmodule Phoenix.LiveViewTest do
   end
 
   defp render_chunk(upload, entry_name, percent) do
-    pid = proxy_pid(upload.view)
+    %{proxy: {_ref, _topic, pid}} = upload.view
     monitor_ref = Process.monitor(pid)
-    trap = Process.flag(:trap_exit, true)
 
     try do
       case UploadClient.chunk(upload, entry_name, percent, proxy_pid(upload.view)) do
         {:ok, _} ->
-          # The chunk function returns as soon as the upload is consumed, therefore
-          # the following could happen:
-          #
-          #   1. the upload is consumed, and the channel is closed
-          #     --> we receive :ok here
-          #     --> the progress callback redirected, the channel sends a message to itself
-          #   2. we try to render and send a message to the ClientProxy, which pings the channel
-          #   3. the channel receives the ping before it is scheduled to send the redirect message to
-          #      itself, therefore the ping succeeds
-          #   4. we receive the HTML, but we expected a redirect shutdown
-          #
-          # If we synchronize here, we ensure that the channel successfully sent the redirect message
-          # before we try to render. This way, either the first sync already fails, or the second sync
-          # inside the render fails because at that time, the redirect message must have been processed
-          # by the channel.
-          sync_with_root!(upload.view)
           render(upload.view)
 
         {:error, reason} ->
@@ -2073,14 +2037,6 @@ defmodule Phoenix.LiveViewTest do
         after
           0 -> exit(reason)
         end
-    after
-      Process.flag(:trap_exit, trap)
     end
-  end
-
-  defp sync_with_root!(%View{} = view) do
-    pid = proxy_pid(view)
-    proxy_topic = proxy_topic(view)
-    GenServer.call(pid, {:sync_with_root, proxy_topic})
   end
 end

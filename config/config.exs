@@ -20,7 +20,7 @@ config :heads_up, HeadsUpWeb.Endpoint,
     layout: false
   ],
   pubsub_server: HeadsUp.PubSub,
-  live_view: [signing_salt: "huLLiaY3"]
+  live_view: [signing_salt: "yUMlNe+h"]
 
 # Configures the mailer
 #

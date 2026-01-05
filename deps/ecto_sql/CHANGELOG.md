@@ -1,44 +1,5 @@
 # Changelog for v3.x
 
-## v3.13.3 (2025-12-08)
-
-### Enhancements
-
-  * [sql] Tag generated functions as `:generated`
-  * [sql] Add `:wrap_in_transaction` option to explain
-
-### Bug fixes
-
-  * [mysql] Fix `structure_load/2` for MySQL 9.4+
-
-## v3.13.2 (2025-06-24)
-
-### Enhancements
-
-  * [sandbox] Allow passing through opts in `Ecto.Adapters.SQL.Sandbox.allow/4` calls
-  * [sql] Add support for `ON DELETE SET DEFAULT`
-
-### Bug fixes
-
-  * [postgres] Fix nested array generated time columns
-
-## v3.13.1 (2025-06-20)
-
-### Bug fixes
-
-  * [postgres] Fix nested array generated columns
-
-## v3.13.0 (2025-06-18)
-
-### Enhancements
-
-  * [Ecto.Migration] Add support for index directions
-  * [sql] Support `:log_stacktrace_mfa` for filtering or modifying stacktrace-derived info in query logs
-  * [mysql] Support arrays using JSON for MariaDB
-  * [mysql] Allow to specify `:prepare` per operation
-  * [postgres] Add support for collations in Postgres
-  * [postgres] Allow source fields in `json_extract_path`
-
 ## v3.12.1 (2024-10-07)
 
 ### Enhancements

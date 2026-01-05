@@ -2,6 +2,7 @@ defmodule Phoenix.LiveViewTest.UploadClient do
   @moduledoc false
   use GenServer
   require Logger
+  require Phoenix.ChannelTest
 
   alias Phoenix.LiveViewTest.{Upload, ClientProxy}
 

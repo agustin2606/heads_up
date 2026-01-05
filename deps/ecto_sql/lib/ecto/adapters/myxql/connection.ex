@@ -671,14 +671,14 @@ if Code.ensure_loaded?(MyXQL) do
     end
 
     defp expr({{:., _, [{:parent_as, _, [as]}, field]}, _, []}, _sources, query)
-         when is_atom(field) or is_binary(field) do
+         when is_atom(field) do
       {ix, sources} = get_parent_sources_ix(query, as)
       {_, name, _} = elem(sources, ix)
       [name, ?. | quote_name(field)]
     end
 
     defp expr({{:., _, [{:&, _, [idx]}, field]}, _, []}, sources, _query)
-         when is_atom(field) or is_binary(field) do
+         when is_atom(field) do
       {_, name, _} = elem(sources, idx)
       [name, ?. | quote_name(field)]
     end
@@ -746,16 +746,8 @@ if Code.ensure_loaded?(MyXQL) do
       [?(, values_list(types, num_rows, query), ?)]
     end
 
-    defp expr({:identifier, _, [literal]}, _sources, _query) do
+    defp expr({:literal, _, [literal]}, _sources, _query) do
       quote_name(literal)
-    end
-
-    defp expr({:constant, _, [literal]}, _sources, _query) when is_binary(literal) do
-      [?', escape_string(literal), ?']
-    end
-
-    defp expr({:constant, _, [literal]}, _sources, _query) when is_number(literal) do
-      [to_string(literal)]
     end
 
     defp expr({:splice, _, [{:^, _, [_, length]}]}, _sources, _query) do
@@ -812,12 +804,6 @@ if Code.ensure_loaded?(MyXQL) do
 
           integer when is_integer(integer) ->
             "[#{integer}]"
-
-          _ ->
-            error!(
-              query,
-              "MySQL adapter does not support references to source fields inside of `json_extract_path`"
-            )
         end)
 
       ["json_extract(", expr(expr, sources, query), ", '$", path, "')"]
@@ -840,7 +826,7 @@ if Code.ensure_loaded?(MyXQL) do
             fun,
             ?(,
             modifier,
-            Enum.map_intersperse(args, ", ", &expr(&1, sources, query)),
+            Enum.map_intersperse(args, ", ", &top_level_expr(&1, sources, query)),
             ?)
           ]
       end
@@ -895,7 +881,7 @@ if Code.ensure_loaded?(MyXQL) do
     end
 
     defp values_list(types, num_rows, query) do
-      rows = :lists.seq(1, num_rows, 1)
+      rows = Enum.to_list(1..num_rows)
 
       [
         "VALUES ",
@@ -1215,13 +1201,7 @@ if Code.ensure_loaded?(MyXQL) do
     end
 
     defp column_change(_table, {:add_if_not_exists, name, type, opts}) do
-      [
-        "ADD IF NOT EXISTS ",
-        quote_name(name),
-        ?\s,
-        column_type(type, opts),
-        column_options(opts)
-      ]
+      ["ADD IF NOT EXISTS ", quote_name(name), ?\s, column_type(type, opts), column_options(opts)]
     end
 
     defp column_change(table, {:modify, name, %Reference{} = ref, opts}) do
@@ -1270,15 +1250,8 @@ if Code.ensure_loaded?(MyXQL) do
       null = Keyword.get(opts, :null)
       after_column = Keyword.get(opts, :after)
       comment = Keyword.get(opts, :comment)
-      collation = Keyword.fetch(opts, :collation)
 
-      [
-        default_expr(default),
-        collation_expr(collation),
-        null_expr(null),
-        comment_expr(comment),
-        after_expr(after_column)
-      ]
+      [default_expr(default), null_expr(null), comment_expr(comment), after_expr(after_column)]
     end
 
     defp comment_expr(comment, create_table? \\ false)
@@ -1298,9 +1271,6 @@ if Code.ensure_loaded?(MyXQL) do
     defp null_expr(false), do: " NOT NULL"
     defp null_expr(true), do: " NULL"
     defp null_expr(_), do: []
-
-    defp collation_expr({:ok, collation_name}), do: " COLLATE \"#{collation_name}\""
-    defp collation_expr(_), do: []
 
     defp new_constraint_expr(%Constraint{check: check} = constraint) when is_binary(check) do
       [
@@ -1334,33 +1304,10 @@ if Code.ensure_loaded?(MyXQL) do
     defp default_expr(:error),
       do: []
 
-    defp index_expr({dir, literal})
-         when is_binary(literal),
-         do: index_dir(dir, literal)
-
-    defp index_expr({dir, literal}),
-      do: index_dir(dir, quote_name(literal))
-
     defp index_expr(literal) when is_binary(literal),
       do: literal
 
     defp index_expr(literal), do: quote_name(literal)
-
-    defp index_dir(dir, str)
-         when dir in [
-                :asc,
-                :asc_nulls_first,
-                :asc_nulls_last,
-                :desc,
-                :desc_nulls_first,
-                :desc_nulls_last
-              ] do
-      case dir do
-        :asc -> [str | " ASC"]
-        :desc -> [str | " DESC"]
-        _ -> error!(nil, "#{dir} is not supported in indexes in MySQL")
-      end
-    end
 
     defp engine_expr(storage_engine),
       do: [" ENGINE = ", String.upcase(to_string(storage_engine || "INNODB"))]
@@ -1481,20 +1428,6 @@ if Code.ensure_loaded?(MyXQL) do
       error!(
         nil,
         "MySQL adapter does not support the `{:nilify, columns}` action for `:on_delete`"
-      )
-    end
-
-    defp reference_on_delete(:default_all) do
-      error!(
-        nil,
-        "MySQL adapter does not support the `:default_all` action for `:on_delete`"
-      )
-    end
-
-    defp reference_on_delete({:default, _columns}) do
-      error!(
-        nil,
-        "MySQL adapter does not support the `{:default, columns}` action for `:on_delete`"
       )
     end
 

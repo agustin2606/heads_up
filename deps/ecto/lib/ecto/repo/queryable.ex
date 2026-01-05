@@ -19,15 +19,6 @@ defmodule Ecto.Repo.Queryable do
     execute(:all, name, query, tuplet) |> elem(1)
   end
 
-  def all_by(name, queryable, clauses, tuplet) do
-    query =
-      queryable
-      |> Ecto.Query.where([], ^Enum.to_list(clauses))
-      |> Ecto.Query.Planner.ensure_select(true)
-
-    execute(:all, name, query, tuplet) |> elem(1)
-  end
-
   def stream(_name, queryable, {adapter_meta, opts}) do
     %{adapter: adapter, cache: cache, repo: repo} = adapter_meta
 
@@ -203,11 +194,11 @@ defmodule Ecto.Repo.Queryable do
     struct_load!(types, values, [{field, value} | acc], all_nil?, struct, adapter)
   end
 
-  def struct_load!([], values, _acc, true, struct, _adapter) when struct != %{} do
+  def struct_load!([], values, _acc, true, _struct, _adapter) do
     {nil, values}
   end
 
-  def struct_load!([], values, acc, _all_nil?, struct, _adapter) do
+  def struct_load!([], values, acc, false, struct, _adapter) do
     {Map.merge(struct, Map.new(acc)), values}
   end
 
@@ -353,8 +344,7 @@ defmodule Ecto.Repo.Queryable do
         process_update(data, args, row, from, adapter)
 
       {data, _row} ->
-        raise ArgumentError,
-              "expected a struct named #{inspect(struct)}, got: #{inspect(data)}"
+        raise BadStructError, struct: struct, term: data
     end
   end
 

@@ -24,15 +24,15 @@ defmodule ThousandIsland.Socket do
   """
   @spec new(
           ThousandIsland.Transport.socket(),
-          ThousandIsland.HandlerConfig.t(),
+          ThousandIsland.ServerConfig.t(),
           ThousandIsland.Telemetry.t()
         ) :: t()
-  def new(raw_socket, handler_config, span) do
+  def new(raw_socket, server_config, span) do
     %__MODULE__{
       socket: raw_socket,
-      transport_module: handler_config.transport_module,
-      read_timeout: handler_config.read_timeout,
-      silent_terminate_on_error: handler_config.silent_terminate_on_error,
+      transport_module: server_config.transport_module,
+      read_timeout: server_config.read_timeout,
+      silent_terminate_on_error: server_config.silent_terminate_on_error,
       span: span
     }
   end
@@ -67,7 +67,7 @@ defmodule ThousandIsland.Socket do
   def upgrade(%__MODULE__{} = socket, module, opts) when is_atom(module) do
     case module.upgrade(socket.socket, opts) do
       {:ok, updated_socket} ->
-        {:ok, %{socket | socket: updated_socket, transport_module: module}}
+        {:ok, %__MODULE__{socket | socket: updated_socket, transport_module: module}}
 
       {:error, reason} = err ->
         ThousandIsland.Telemetry.stop_span(socket.span, %{}, %{error: reason})
@@ -216,14 +216,6 @@ defmodule ThousandIsland.Socket do
   @spec negotiated_protocol(t()) :: ThousandIsland.Transport.on_negotiated_protocol()
   def negotiated_protocol(%__MODULE__{} = socket) do
     socket.transport_module.negotiated_protocol(socket.socket)
-  end
-
-  @doc """
-  Returns information about the SSL connection info, if transport is SSL.
-  """
-  @spec connection_information(t()) :: ThousandIsland.Transport.on_connection_information()
-  def connection_information(%__MODULE__{} = socket) do
-    socket.transport_module.connection_information(socket.socket)
   end
 
   @doc """

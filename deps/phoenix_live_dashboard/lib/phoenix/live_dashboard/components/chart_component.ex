@@ -3,30 +3,43 @@ defmodule Phoenix.LiveDashboard.ChartComponent do
 
   @impl true
   def mount(socket) do
-    {:ok, socket, temporary_assigns: [data: []]}
+    {:ok,
+     socket
+     |> stream_configure(:data, dom_id: &data_dom_id/1)
+     |> stream(:data, [])}
   end
+
+  defp data_dom_id(_), do: "unused"
 
   @impl true
   def update(assigns, socket) do
-    socket = assign(socket, assigns)
-    validate_assigns!(socket.assigns)
+    {data, assigns} = Map.pop(assigns, :data, [])
+    socket = assign(socket, assigns) |> normalize_assigns!(data)
     {:ok, socket}
   end
 
-  defp validate_assigns!(assigns) do
+  defp normalize_assigns!(socket, data) do
+    %{assigns: assigns} = socket
     validate_positive_integer_or_nil!(assigns[:bucket_size], :bucket_size)
     validate_positive_integer_or_nil!(assigns[:prune_threshold], :prune_threshold)
-    :ok
+    normalize_data(socket, data)
   end
 
   defp validate_positive_integer_or_nil!(nil, _field), do: nil
 
   defp validate_positive_integer_or_nil!(value, field) do
     unless is_integer(value) and value > 0 do
-      raise ArgumentError, "#{inspect(field)} must be a positive integer, got: #{inspect(value)}"
+      msg = "#{inspect(field)} must be a positive integer, got: #{inspect(value)}"
+      raise ArgumentError, msg
     end
+  end
 
-    value
+  defp normalize_data(socket, data) do
+    label = socket.assigns.label
+
+    data
+    |> Enum.map(fn {x, y, z} -> {x || label, y, z} end)
+    |> Enum.reduce(socket, fn elem, socket -> stream_insert(socket, :data, elem) end)
   end
 
   @impl true
@@ -35,8 +48,9 @@ defmodule Phoenix.LiveDashboard.ChartComponent do
     <div class={chart_size(@full_width)}>
       <div id={"chart-#{@id}"} class="card">
         <div class="card-body">
+          <!-- We don't add a phx-update="stream" because js expects only new data -->
           <div phx-hook="PhxChartComponent" id={"chart-#{@id}-datasets"} hidden>
-            <span :for={{x, y, z} <- @data} data-x={x || @label} data-y={y} data-z={z}></span>
+            <span :for={{_id, {x, y, z}} <- @streams.data} data-x={x} data-y={y} data-z={z}></span>
           </div>
           <div
             class="chart"

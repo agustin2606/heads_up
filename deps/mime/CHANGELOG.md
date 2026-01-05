@@ -1,9 +1,5 @@
 # Changelog
 
-## v2.0.7
-
-  * Correct support for JP2000
-
 ## v2.0.6
 
   * Add mimes for ZSTD, APNG, JP2000

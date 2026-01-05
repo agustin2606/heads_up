@@ -1,66 +1,30 @@
 defmodule Ecto.Changeset do
   @moduledoc ~S"""
-  Changesets allow filtering, type casting, validation, and
-  constraints when manipulating structs, usually in preparation
-  for inserting and updating entries into a database.
+  Changesets allow filtering, casting, validation and
+  definition of constraints when manipulating structs.
 
-  Let's break down what those features mean. Imagine the common
-  scenario where you want to receive data from a user submitted
-  web form to create or update entries in the database. Once you
-  receive this data on the server, changesets will help you perform
-  the following actions:
+  There is an example of working with changesets in the introductory
+  documentation in the `Ecto` module. The functions `cast/4` and
+  `change/2` are the usual entry points for creating changesets.
+  The first one is used to cast and validate external parameters,
+  such as parameters sent through a form, API, command line, etc.
+  The second one is used to change data directly from your application.
 
-    * **filtering** - because you are receiving external data from
-      a third-party, you must explicitly list which data you accept.
-      For example, you most likely don't want to allow a user to set
-      its own "is_admin" field to true
-    
-    * **type casting** - a web form sends most of its data as strings.
-      When the user types the number "100", Ecto will receive it as
-      the string "100", which must then be converted to 100.
-      Changesets are responsible for converting these values to the
-      types defined in your `Ecto.Schema`, support even complex types
-      such as datetimes
-
-    * **validations** - the data the user submits may not correct.
-      For example, the user may type an invalid email address, with
-      a trailing dot. Or say the date for a future meeting would
-      happen in the last year. You must validate the data and give
-      feedback to the user
-
-    * **constraints** - some validations can only happen with the
-      help of the database. For example, in order to know if a user
-      email is already taken or not, you must query the database.
-      Constraints help you do that in a way that respects data
-      integrity
-
-  Although we have used a web form as an example, changesets can be used
-  for APIs and many other scenarios. Changesets may also be used to work
-  with data even if it won't be written to a database. We will cover
-  these scenarios in the documentation below. There is also an introductory
-  example of working with changesets and how it relates to schemas and
-  repositories [in the `Ecto` module](`Ecto#module-changesets`).
-
-  In a nutshell, there are two main functions for creating a changeset.
-  The `cast/4` function is used to receive external parameters from a
-  form, API or command line, and convert them to the types defined in
-  your `Ecto.Schema`. `change/2` is used to modify data directly from
-  your application, assuming the data given is valid and matches the
-  existing types. The remaining functions in this module, such as
-  validations, constraints, association handling, are about manipulating
+  The remaining functions in this module, such as validations,
+  constraints, association handling, are about manipulating
   changesets.
 
   ## External vs internal data
 
   Changesets allow working with two kinds of data:
 
-    * external to the application - for example user input from
-      a form that needs to be type-converted and properly validated. This
-      use case is primarily covered by the `cast/4` function.
-
     * internal to the application - for example programmatically generated,
       or coming from other subsystems. This use case is primarily covered
       by the `change/2` and `put_change/3` functions.
+
+    * external to the application - for example data provided by the user in
+      a form that needs to be type-converted and properly validated. This
+      use case is primarily covered by the `cast/4` function.
 
   When working with external data, the data is typically provided
   as maps with string keys (also known as parameters). On the other hand,
@@ -183,8 +147,8 @@ defmodule Ecto.Changeset do
 
   ## Associations, embeds, and on replace
 
-  Using changesets you can work with associations as well as with
-  [embedded](embedded-schemas.html) structs. There are two primary APIs:
+  Using changesets you can work with associations as well as with embedded
+  structs. There are two primary APIs:
 
     * `cast_assoc/3` and `cast_embed/3` - those functions are used when
       working with external data. In particular, they allow you to change
@@ -382,7 +346,7 @@ defmodule Ecto.Changeset do
   alias Ecto.Changeset.Relation
   alias Ecto.Schema.Metadata
 
-  @empty_values [&Ecto.Type.empty_trimmed?/2]
+  @empty_values [&Ecto.Type.empty_trimmed_string?/1]
 
   # If a new field is added here, def merge must be adapted
   defstruct valid?: false,
@@ -656,10 +620,7 @@ defmodule Ecto.Changeset do
 
   ## Options
 
-    * `:empty_values` - a list containing elements of type `t:empty_value/0`. Those are
-      either values, which will be considered empty if they match, or a function that must
-      return a boolean if the value is empty or not. 1-arity functions will receive the value
-      being casted and 2-arity functions will receive the value being casted and its field type.
+    * `:empty_values` - a list of values to be considered as empty when casting.
       Empty values are always replaced by the default value of the respective field.
       If the field is an array type, any empty value inside of the array will be removed.
       To set this option while keeping the current default, use `empty_values/0` and add
@@ -964,31 +925,24 @@ defmodule Ecto.Changeset do
     end
   end
 
-  defp filter_empty_values(type, value, empty_values) do
-    filter_empty_value(empty_values, value, type)
+  defp filter_empty_values(_type, value, empty_values) do
+    filter_empty_value(empty_values, value)
   end
 
-  defp filter_empty_value([head | tail], value, type) when is_function(head, 1) do
+  defp filter_empty_value([head | tail], value) when is_function(head) do
     case head.(value) do
       true -> :empty
-      false -> filter_empty_value(tail, value, type)
+      false -> filter_empty_value(tail, value)
     end
   end
 
-  defp filter_empty_value([head | tail], value, type) when is_function(head, 2) do
-    case head.(value, type) do
-      true -> :empty
-      false -> filter_empty_value(tail, value, type)
-    end
-  end
-
-  defp filter_empty_value([value | _tail], value, _type),
+  defp filter_empty_value([value | _tail], value),
     do: :empty
 
-  defp filter_empty_value([_head | tail], value, type),
-    do: filter_empty_value(tail, value, type)
+  defp filter_empty_value([_head | tail], value),
+    do: filter_empty_value(tail, value)
 
-  defp filter_empty_value([], value, _type),
+  defp filter_empty_value([], value),
     do: {:ok, value}
 
   # We only look at the first element because traversing the whole map
@@ -1962,11 +1916,8 @@ defmodule Ecto.Changeset do
 
   This function is used to work with associations as a whole. For example,
   if a Post has many Comments, it allows you to add, remove or change all
-  comments at once, automatically computing inserts/updates/deletes by
-  comparing the data that you gave with the one already in the database.
-  If your goal is to manage individual resources, such as adding a new
-  comment to a post, or update post linked to a comment, then it is not
-  necessary to use this function. We will explore this later in the
+  comments at once. If your goal is to simply add a new comment to a post,
+  then it is preferred to do so manually, as we will describe later in the
   ["Example: Adding a comment to a post" section](#put_assoc/4-example-adding-a-comment-to-a-post).
 
   This function requires the associated data to have been preloaded, except
@@ -2290,7 +2241,7 @@ defmodule Ecto.Changeset do
     if changeset.valid? do
       {:ok, apply_changes(changeset)}
     else
-      {:error, %{changeset | action: action}}
+      {:error, %Changeset{changeset | action: action}}
     end
   end
 
@@ -3305,75 +3256,23 @@ defmodule Ecto.Changeset do
     result = Decimal.compare(value, target_value)
 
     case decimal_compare(result, spec_key) do
-      true ->
-        nil
-
-      false ->
-        [
-          {field,
-           message(opts, default_message,
-             validation: :number,
-             kind: spec_key,
-             number: target_value
-           )}
-        ]
+      true -> nil
+      false -> [{field, message(opts, default_message, validation: :number, kind: spec_key, number: target_value)}]
     end
   end
 
-  defp compare_numbers(
-         field,
-         value,
-         default_message,
-         spec_key,
-         spec_function,
-         %Decimal{} = target_value,
-         opts
-       ) do
-    compare_numbers(
-      field,
-      decimal_new(value),
-      default_message,
-      spec_key,
-      spec_function,
-      target_value,
-      opts
-    )
+  defp compare_numbers(field, value, default_message, spec_key, spec_function, %Decimal{} = target_value, opts) do
+    compare_numbers(field, decimal_new(value), default_message, spec_key, spec_function, target_value, opts)
   end
 
-  defp compare_numbers(
-         field,
-         %Decimal{} = value,
-         default_message,
-         spec_key,
-         spec_function,
-         target_value,
-         opts
-       ) do
-    compare_numbers(
-      field,
-      value,
-      default_message,
-      spec_key,
-      spec_function,
-      decimal_new(target_value),
-      opts
-    )
+  defp compare_numbers(field, %Decimal{} = value, default_message, spec_key, spec_function, target_value, opts) do
+    compare_numbers(field, value, default_message, spec_key, spec_function, decimal_new(target_value), opts)
   end
 
   defp compare_numbers(field, value, default_message, spec_key, spec_function, target_value, opts) do
     case apply(spec_function, [value, target_value]) do
-      true ->
-        nil
-
-      false ->
-        [
-          {field,
-           message(opts, default_message,
-             validation: :number,
-             kind: spec_key,
-             number: target_value
-           )}
-        ]
+      true -> nil
+      false -> [{field, message(opts, default_message, validation: :number, kind: spec_key, number: target_value)}]
     end
   end
 

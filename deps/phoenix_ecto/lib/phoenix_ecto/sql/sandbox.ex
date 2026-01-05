@@ -94,21 +94,16 @@ defmodule Phoenix.Ecto.SQL.Sandbox do
   Now you can use the `on_mount/4` callback to check the header and assign the sandbox:
 
       defmodule MyApp.LiveAcceptance do
-        import Phoenix.LiveView
-        import Phoenix.Component
-
         def on_mount(:default, _params, _session, socket) do
-          socket =
+          %{assigns: %{phoenix_ecto_sandbox: metadata}} =
             assign_new(socket, :phoenix_ecto_sandbox, fn ->
               if connected?(socket), do: get_connect_info(socket, :user_agent)
             end)
 
-          metadata = socket.assigns.phoenix_ecto_sandbox
           Phoenix.Ecto.SQL.Sandbox.allow(metadata, Ecto.Adapters.SQL.Sandbox)
-          {:cont, socket}
         end
       end
-
+      
   Now, in your `my_app_web.ex` file, you can invoke this callback for all of your
   LiveViews if the sandbox configuration, defined at the beginning of the
   documentation, is enabled:
@@ -117,28 +112,13 @@ defmodule Phoenix.Ecto.SQL.Sandbox do
         quote do
           use Phoenix.LiveView
           # ...
-
+          
           if Application.compile_env(:your_app, :sql_sandbox) do
             on_mount MyApp.LiveAcceptance
           end
-
+          
           # ...
         end
-      end
-
-  If you have `on_mount` hooks in `live_session` defined in your `router.ex`
-  (for example, routes requiring authentication after running `mix phx.gen.auth`
-  to generate your authentication system), make sure the `MyApp.LiveAcceptance`
-  hook runs before, so following hooks have access to the Ecto Sandbox:
-
-      live_session :require_authenticated_user,
-        on_mount:
-          if(Application.compile_env(:your_app, :sql_sandbox),
-            do: [MyAppWeb.AcceptanceHook],
-            else: []
-          ) ++ [{MyAppWeb.UserAuth, :ensure_authenticated}] do
-        live "/users/settings", UserSettingsLive, :edit
-        live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
       end
 
   ## Concurrent end-to-end tests with external clients
@@ -215,8 +195,7 @@ defmodule Phoenix.Ecto.SQL.Sandbox do
       header: Keyword.get(opts, :header, "user-agent"),
       path: get_path_info(opts[:at]),
       repos: List.wrap(opts[:repo]),
-      sandbox:
-        session_opts[:sandbox] || {Ecto.Adapters.SQL.Sandbox, :allow, [[unallow_existing: true]]},
+      sandbox: session_opts[:sandbox] || Ecto.Adapters.SQL.Sandbox,
       session_opts: session_opts
     }
   end
@@ -340,14 +319,8 @@ defmodule Phoenix.Ecto.SQL.Sandbox do
   end
 
   def allow(%{repo: repo, owner: owner}, sandbox),
-    do: Enum.each(List.wrap(repo), &allow_sandbox(sandbox, &1, owner, self()))
+    do: Enum.each(List.wrap(repo), &sandbox.allow(&1, owner, self()))
 
   def allow(%{}, _sandbox), do: :ok
   def allow(nil, _sandbox), do: :ok
-
-  defp allow_sandbox({m, f, args}, repo, owner, pid),
-    do: apply(m, f, [repo, owner, pid | args])
-
-  defp allow_sandbox(sandbox, repo, owner, pid) when is_atom(sandbox),
-    do: sandbox.allow(repo, owner, pid)
 end

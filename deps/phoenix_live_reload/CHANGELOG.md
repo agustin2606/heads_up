@@ -1,31 +1,5 @@
 # Changelog
 
-## 1.6.2 (2025-12-08)
-
-* Bug fixes
-  * Properly deal with Unicode when forwarding logs
-
-## 1.6.1 (2025-08-31)
-
-* Enhancements
-  * Set `:phoenix_live_reload` private field to downstream instrumentation
-  * Add `@import` directive support to CSS reload strategy
-
-## 1.6.0 (2025-04-10)
-
-* Enhancements
-  * Add support for `__RELATIVEFILE__` when invoking editors
-  * Change the default target window to `:parent` to not reload the whole page if a Phoenix app is shown inside an iframe. You can get the old behavior back by setting the `:target_window` option to `:top`:
-    ```elixir
-    config :phoenix_live_reload, MyAppWeb.Endpoint,
-      target_window: :top,
-      ...
-    ```
-
-* Bug fixes
-  * Inject iframe if web console logger is enabled but there are no patterns
-  * Allow web console to shutdown cleanly
-
 ## 1.5.3 (2024-03-27)
 
 * Bug fixes

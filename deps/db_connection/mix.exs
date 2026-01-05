@@ -3,13 +3,13 @@ defmodule DBConnection.Mixfile do
 
   @source_url "https://github.com/elixir-ecto/db_connection"
   @pools [:connection_pool, :ownership]
-  @version "2.8.1"
+  @version "2.7.0"
 
   def project do
     [
       app: :db_connection,
       version: @version,
-      elixir: "~> 1.11",
+      elixir: "~> 1.8",
       deps: deps(),
       docs: docs(),
       description: description(),
@@ -54,7 +54,7 @@ defmodule DBConnection.Mixfile do
   defp package do
     %{
       licenses: ["Apache-2.0"],
-      maintainers: ["James Fish", "José Valim"],
+      maintainers: ["James Fish"],
       links: %{"GitHub" => @source_url}
     }
   end

@@ -209,24 +209,6 @@ defmodule Plug.Test do
   end
 
   @doc """
-  Puts the sock data.
-  """
-  def put_sock_data(conn, sock_data) do
-    update_in(conn.adapter, fn {adapter, payload} ->
-      {adapter, Map.put(payload, :sock_data, sock_data)}
-    end)
-  end
-
-  @doc """
-  Puts the ssl data.
-  """
-  def put_ssl_data(conn, ssl_data) do
-    update_in(conn.adapter, fn {adapter, payload} ->
-      {adapter, Map.put(payload, :ssl_data, ssl_data)}
-    end)
-  end
-
-  @doc """
   Puts a request cookie.
   """
   @spec put_req_cookie(Conn.t(), binary, binary) :: Conn.t()
@@ -282,7 +264,7 @@ defmodule Plug.Test do
   If the session has already been initialized, the new contents will be merged
   with the previous ones.
   """
-  @spec init_test_session(Conn.t(), %{optional(String.t() | atom) => any} | keyword) :: Conn.t()
+  @spec init_test_session(Conn.t(), %{optional(String.t() | atom) => any}) :: Conn.t()
   def init_test_session(conn, session) do
     conn =
       if conn.private[:plug_session_fetch] do

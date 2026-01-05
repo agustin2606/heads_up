@@ -107,7 +107,6 @@ defmodule Phoenix.Component.Declarative do
     onwaiting
     part
     placeholder
-    popover
     rel
     role
     slot
@@ -224,7 +223,6 @@ defmodule Phoenix.Component.Declarative do
     Module.register_attribute(module, :__slots__, accumulate: true)
     Module.register_attribute(module, :__slot__, accumulate: false)
     Module.register_attribute(module, :__components_calls__, accumulate: true)
-    Module.register_attribute(module, :__macro_components__, accumulate: true)
     Module.put_attribute(module, :__components__, %{})
     Module.put_attribute(module, :on_definition, __MODULE__)
     Module.put_attribute(module, :before_compile, __MODULE__)
@@ -630,7 +628,6 @@ defmodule Phoenix.Component.Declarative do
 
     components = Module.get_attribute(env.module, :__components__)
     components_calls = Module.get_attribute(env.module, :__components_calls__) |> Enum.reverse()
-    macro_components = Module.get_attribute(env.module, :__macro_components__)
 
     names_and_defs =
       for {name, %{kind: kind, attrs: attrs, slots: slots, line: line}} <- components do
@@ -723,23 +720,7 @@ defmodule Phoenix.Component.Declarative do
         end
       end
 
-    macro_components_ast =
-      if macro_components != [] do
-        grouped =
-          Enum.group_by(macro_components, fn {module, _data} -> module end, fn {_module, data} ->
-            data
-          end)
-
-        quote do
-          @doc false
-          def __phoenix_macro_components__ do
-            unquote(Macro.escape(grouped))
-          end
-        end
-      end
-
-    {:__block__, [],
-     [def_components_ast, def_components_calls_ast, macro_components_ast, overridable | defs]}
+    {:__block__, [], [def_components_ast, def_components_calls_ast, overridable | defs]}
   end
 
   defp register_component!(kind, env, name, check_if_defined?) do
@@ -1000,19 +981,12 @@ defmodule Phoenix.Component.Declarative do
     end
   end
 
-  defp build_attr_values_or_examples(%{opts: opts} = attr) do
-    space_before = if attr[:doc] || opts[:default], do: ?\s, else: []
+  defp build_attr_values_or_examples(%{opts: [values: values]}) do
+    ["Must be one of ", build_literals_list(values, "or"), ?.]
+  end
 
-    cond do
-      Keyword.get(opts, :values) ->
-        [space_before, "Must be one of ", build_literals_list(opts[:values], "or"), ?.]
-
-      Keyword.get(opts, :examples) ->
-        [space_before, "Examples include ", build_literals_list(opts[:examples], "and"), ?.]
-
-      true ->
-        []
-    end
+  defp build_attr_values_or_examples(%{opts: [examples: examples]}) do
+    ["Examples include ", build_literals_list(examples, "and"), ?.]
   end
 
   defp build_attr_values_or_examples(_attr) do
@@ -1098,7 +1072,7 @@ defmodule Phoenix.Component.Declarative do
   @doc false
   def __verify__(module, component_calls) do
     for %{component: {submod, fun}} = call <- component_calls,
-        Code.ensure_loaded?(submod) and function_exported?(submod, :__components__, 0),
+        function_exported?(submod, :__components__, 0),
         component = submod.__components__()[fun],
         do: verify(module, call, component)
 

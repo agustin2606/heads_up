@@ -1,6 +1,8 @@
 defmodule Floki do
   alias Floki.{Finder, FilterOut, HTMLTree}
 
+  require Logger
+
   @moduledoc """
   Floki is a simple HTML parser that enables search for nodes using CSS selectors.
 
@@ -79,6 +81,26 @@ defmodule Floki do
            when is_binary(value) or tuple_size(value) == 3 or
                   (tuple_size(value) == 2 and elem(value, 0) in [:pi, :comment]) or
                   (tuple_size(value) == 4 and elem(value, 0) == :doctype)
+
+  @doc """
+  Parses a HTML Document from a String.
+
+  The expect string is a valid HTML, but the parser will try
+  to parse even with errors.
+  """
+
+  @spec parse(binary()) :: html_tag() | html_tree() | String.t()
+
+  @deprecated "Use `parse_document/1` or `parse_fragment/1` instead."
+  def parse(html) do
+    with {:ok, document} <- Floki.HTMLParser.parse_document(html) do
+      if length(document) == 1 do
+        hd(document)
+      else
+        document
+      end
+    end
+  end
 
   @doc """
   Parses an HTML document from a string.
@@ -250,7 +272,18 @@ defmodule Floki do
       [{"a", [{"href", "https://google.com"}], ["Google"]}]
 
   """
-  @spec find(html_tree() | html_node(), css_selector()) :: html_tree()
+
+  @spec find(binary() | html_tree() | html_node(), css_selector()) :: html_tree
+  def find(html, selector) when is_binary(html) do
+    Logger.info(
+      "deprecation: parse the HTML with parse_document or parse_fragment before using find/2"
+    )
+
+    with {:ok, document} <- Floki.parse_document(html) do
+      Finder.find(document, selector)
+    end
+  end
+
   def find(html_tree_as_tuple, selector)
       when is_list(html_tree_as_tuple) or is_html_node(html_tree_as_tuple) do
     Finder.find(html_tree_as_tuple, selector)
@@ -290,9 +323,21 @@ defmodule Floki do
       [{"div", [{"id", "b"}, {"class", "name"}], []}]
 
   """
-  @spec attr(html_tree() | html_node(), css_selector(), binary, (binary -> binary)) :: html_tree()
+  @spec attr(binary | html_tree | html_node, css_selector(), binary, (binary -> binary)) ::
+          html_tree
+
   def attr(html_elem_tuple, selector, attribute_name, mutation) when is_tuple(html_elem_tuple) do
     attr([html_elem_tuple], selector, attribute_name, mutation)
+  end
+
+  def attr(html, selector, attribute_name, mutation) when is_binary(html) do
+    Logger.info(
+      "deprecation: parse the HTML with parse_document or parse_fragment before using attr/4"
+    )
+
+    with {:ok, document} <- Floki.parse_document(html) do
+      attr(document, selector, attribute_name, mutation)
+    end
   end
 
   def attr(html_tree_list, selector, attribute_name, mutation) when is_list(html_tree_list) do
@@ -318,6 +363,17 @@ defmodule Floki do
         other
     end)
   end
+
+  @deprecated """
+  Use `find_and_update/3` or `Enum.map/2` instead.
+  """
+  def map(_html_tree_or_list, _fun)
+
+  def map(html_tree_list, fun) when is_list(html_tree_list) do
+    Enum.map(html_tree_list, &Finder.map(&1, fun))
+  end
+
+  def map(html_tree, fun), do: Finder.map(html_tree, fun)
 
   @doc """
   Searches for elements inside the HTML tree and update those that matches the selector.
@@ -473,8 +529,7 @@ defmodule Floki do
 
   By default, it will perform a deep search through the HTML tree.
   You can disable deep search with the option `deep` assigned to false.
-  You can include content of script or style tags by setting the `:js` or 
-  `:style` flags, respectively, to true.
+  You can include content of script tags with the option `js` assigned to true.
   You can specify a separator between nodes content.
 
   ## Options
@@ -484,10 +539,7 @@ defmodule Floki do
       or the first level of the HTML document is going to be considered.
       Defaults to `true`.
 
-    * `:js` - A boolean option to control if the contents of `<script>` tags
-      should be considered as text. Defaults to `false`.
-
-    * `:style` - A boolean to control if the contents of `<style>` tags
+    * `:js` - A boolean option to control if the contents of script tags
       should be considered as text. Defaults to `false`.
 
     * `:sep` - A separator string that is added between text nodes.
@@ -534,7 +586,7 @@ defmodule Floki do
 
   """
 
-  @spec text(html_tree() | html_node(), Keyword.t()) :: binary()
+  @spec text(html_tree | html_node | binary, Keyword.t()) :: binary
 
   def text(html, opts \\ []) do
     defaults = [deep: true, js: false, style: true, sep: "", include_inputs: false]
@@ -543,6 +595,7 @@ defmodule Floki do
 
     cleaned_html_tree =
       html
+      |> maybe_parse_it()
       |> clean_html_tree(:js, opts[:js])
       |> clean_html_tree(:style, opts[:style])
 
@@ -634,7 +687,17 @@ defmodule Floki do
       ["google"]
   """
 
-  @spec attribute(html_tree() | html_node(), binary()) :: list(binary())
+  @spec attribute(binary | html_tree | html_node, binary) :: list
+  def attribute(html, attribute_name) when is_binary(html) do
+    Logger.info(
+      "deprecation: parse the HTML with parse_document or parse_fragment before using attribute/2"
+    )
+
+    with {:ok, document} <- Floki.parse_document(html) do
+      attribute_values(document, attribute_name)
+    end
+  end
+
   def attribute(elements, attribute_name) do
     attribute_values(elements, attribute_name)
   end
@@ -675,6 +738,17 @@ defmodule Floki do
     )
   end
 
+  defp maybe_parse_it(html) when is_binary(html) do
+    Logger.info(
+      "deprecation: parse the HTML with parse_document or parse_fragment before using text/2"
+    )
+
+    {:ok, document} = Floki.parse_document(html)
+    document
+  end
+
+  defp maybe_parse_it(html), do: html
+
   defp clean_html_tree(html_tree, :js, true), do: html_tree
   defp clean_html_tree(html_tree, :js, _), do: filter_out(html_tree, "script")
 
@@ -700,8 +774,19 @@ defmodule Floki do
 
   """
 
-  @spec filter_out(html_node() | html_tree(), :comment | :text | css_selector()) ::
+  @spec filter_out(html_node() | html_tree() | binary(), :comment | :text | css_selector()) ::
           html_node() | html_tree()
+
+  def filter_out(html, selector) when is_binary(html) do
+    Logger.info(
+      "deprecation: parse the HTML with parse_document or parse_fragment before using filter_out/2"
+    )
+
+    with {:ok, document} <- Floki.parse_document(html) do
+      FilterOut.filter_out(document, selector)
+    end
+  end
+
   def filter_out(elements, selector) do
     FilterOut.filter_out(elements, selector)
   end

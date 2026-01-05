@@ -1,22 +1,23 @@
 defmodule HeadsUpWeb.IncidentLive.Show do
-  alias HeadsUp.Incidents
   use HeadsUpWeb, :live_view
 
+  alias HeadsUp.Incidents
   import HeadsUpWeb.CustomComponents
 
   def mount(_params, _session, socket) do
     {:ok, socket}
   end
 
-  def handle_params(%{"id" => incident_id}, _uri, socket) do
-    incident = Incidents.get_incident(incident_id)
-    urgent_incidents = Incidents.urgent_incidents(incident)
+  def handle_params(%{"id" => id}, _uri, socket) do
+    incident = Incidents.get_incident!(id)
 
     socket =
       socket
-      |> assign(:page_title, incident.name)
       |> assign(:incident, incident)
-      |> assign(:urgent_incidents, urgent_incidents)
+      |> assign(:page_title, incident.name)
+      |> assign_async(:urgent_incidents, fn ->
+        {:ok, %{urgent_incidents: Incidents.urgent_incidents(incident)}}
+      end)
 
     {:noreply, socket}
   end
@@ -27,11 +28,12 @@ defmodule HeadsUpWeb.IncidentLive.Show do
       <div class="incident">
         <img src={@incident.image_path} />
         <section>
-          <div class="... text-lime-600 border-lime-600">
-            <.badge status={@incident.status} />
-          </div>
+          <.badge status={@incident.status} />
           <header>
-            <h2>{@incident.name}</h2>
+            <div>
+              <h2>{@incident.name}</h2>
+              <h3>{@incident.category.name}</h3>
+            </div>
             <div class="priority">
               {@incident.priority}
             </div>
@@ -44,7 +46,7 @@ defmodule HeadsUpWeb.IncidentLive.Show do
       <div class="activity">
         <div class="left"></div>
         <div class="right">
-          <.urgent_incident urgent_incidents={@urgent_incidents} />
+          <.urgent_incidents incidents={@urgent_incidents} />
         </div>
       </div>
       <.back navigate={~p"/incidents"}>All Incidents</.back>
@@ -52,20 +54,31 @@ defmodule HeadsUpWeb.IncidentLive.Show do
     """
   end
 
-  attr :urgent_incidents, :list, required: true
+  attr :incidents, Phoenix.LiveView.AsyncResult, required: true
 
-  def urgent_incident(assigns) do
+  def urgent_incidents(assigns) do
     ~H"""
     <section>
       <h4>Urgent Incidents</h4>
-      <ul class="incidents">
-        <li :for={incident <- @urgent_incidents}>
-          <.link navigate={~p"/incidents/#{incident}"}>
-            <img src={incident.image_path} />
-            {incident.name}
-          </.link>
-        </li>
-      </ul>
+      <.async_result :let={result} assign={@incidents}>
+        <:loading>
+          <div class="loading">
+            <div class="spinner"></div>
+          </div>
+        </:loading>
+        <:failed :let={{:error, reason}}>
+          <div class="failed">
+            Whoops: {reason}
+          </div>
+        </:failed>
+        <ul class="incidents">
+          <li :for={incident <- result}>
+            <.link navigate={~p"/incidents/#{incident}"}>
+              <img src={incident.image_path} /> {incident.name}
+            </.link>
+          </li>
+        </ul>
+      </.async_result>
     </section>
     """
   end

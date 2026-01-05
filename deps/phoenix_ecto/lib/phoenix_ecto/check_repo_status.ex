@@ -9,16 +9,15 @@ defmodule Phoenix.Ecto.CheckRepoStatus do
 
     * `:otp_app` - name of the application which the repos are fetched from
     * `:migration_paths` - a function that accepts a repo and returns a migration directory, or a list of migration directories, that is used to check for pending migrations
-    * `:migration_lock` - the locking strategy used by the Ecto Adapter when checking for pending migrations. Defaults to `false`. Set to `true` to enable migration locks.
+    * `:migration_lock` - the locking strategy used by the Ecto Adapter when checking for pending migrations. Set to `false` to disable migration locks.
     * `:prefix` - the prefix used to check for pending migrations.
-    * `:skip_table_creation` - Ecto will not try to create the `schema_migrations` table automatically.  This is useful if you are connecting as a DB user without create permissions
   """
 
   @behaviour Plug
 
   alias Plug.Conn
 
-  @migration_opts [:migration_lock, :prefix, :skip_table_creation]
+  @migration_opts [:migration_lock, :prefix]
   @compile {:no_warn_undefined, Ecto.Migrator}
 
   def init(opts) do
@@ -27,18 +26,13 @@ defmodule Phoenix.Ecto.CheckRepoStatus do
   end
 
   def call(%Conn{} = conn, opts) do
-    try do
-      repos = Application.get_env(opts[:otp_app], :ecto_repos, [])
+    repos = Application.get_env(opts[:otp_app], :ecto_repos, [])
 
-      for repo <- repos, Process.whereis(repo) do
-        check_pending_migrations!(repo, opts) || check_storage_up!(repo)
-      end
-
-      conn
-    rescue
-      err in [Phoenix.Ecto.StorageNotCreatedError, Phoenix.Ecto.PendingMigrationError] ->
-        Plug.Conn.WrapperError.reraise(conn, :error, err, __STACKTRACE__)
+    for repo <- repos, Process.whereis(repo) do
+      check_pending_migrations!(repo, opts) || check_storage_up!(repo)
     end
+
+    conn
   end
 
   defp check_storage_up!(repo) do
@@ -67,11 +61,7 @@ defmodule Phoenix.Ecto.CheckRepoStatus do
       end)
 
     true = is_function(migrations_fun, 3)
-
-    migration_opts =
-      opts
-      |> Keyword.take(@migration_opts)
-      |> Keyword.put_new(:migration_lock, false)
+    migration_opts = Keyword.take(opts, @migration_opts)
 
     try do
       repo

@@ -44,7 +44,8 @@ defmodule Phoenix.LiveReloader do
       live reload. Expects a keyword list of atom keys and string values.
 
     * `:target_window` - the window that will be reloaded, as an atom.
-      Valid values are `:top` and `:parent`. Defaults to `:parent`.
+      Valid values are `:top` and `:parent`. An invalid value will
+      default to `:top`.
 
     * `:url` - the URL of the live reload socket connection. By default
       it will use the browser's host and port.
@@ -71,7 +72,7 @@ defmodule Phoenix.LiveReloader do
 
     * `:web_console_logger` - If true, the live reloader will log messages
       to the web console in your browser. Defaults to false.
-      *Note*: Requires Elixir v1.15+ and your application javascript bundle will need
+      *Note*: Requires Elixir v1.15+ and your appplication javascript bundle will need
       to enable logs. See the README for more information.
 
   In an umbrella app, if you want to enable live reloading based on code
@@ -125,7 +126,7 @@ defmodule Phoenix.LiveReloader do
     config = endpoint.config(:live_reload)
     url = config[:url] || endpoint.path("/phoenix/live_reload/socket#{suffix(endpoint)}")
     interval = config[:interval] || 100
-    target_window = get_target_window(config[:target_window] || :parent)
+    target_window = get_target_window(config[:target_window])
     reload_page_on_css_changes? = config[:reload_page_on_css_changes] || false
 
     conn
@@ -144,11 +145,10 @@ defmodule Phoenix.LiveReloader do
   def call(conn, _) do
     endpoint = conn.private.phoenix_endpoint
     config = endpoint.config(:live_reload)
+    patterns = config[:patterns]
 
-    if match?([_ | _], config[:patterns]) || config[:web_console_logger] do
-      conn
-      |> put_private(:phoenix_live_reload, true)
-      |> before_send_inject_reloader(endpoint, config)
+    if patterns && patterns != [] do
+      before_send_inject_reloader(conn, endpoint, config)
     else
       conn
     end

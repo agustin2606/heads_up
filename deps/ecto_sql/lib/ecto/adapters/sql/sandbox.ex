@@ -45,7 +45,11 @@ defmodule Ecto.Adapters.SQL.Sandbox do
 
         setup do
           # Explicitly get a connection before each test
-          pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Repo)
+          :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)
+        end
+
+        setup tags do
+          pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Repo, shared: not tags[:async])
           on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
           :ok
         end
@@ -104,9 +108,6 @@ defmodule Ecto.Adapters.SQL.Sandbox do
   the parent's connection (i.e. the test process' connection) to
   the task.
 
-  Besides calling `allow/3` allowance can also be provided to processes
-  via [Caller Tracking](`m:Task#module-ancestor-and-caller-tracking`).
-
   Because allowances use an explicit mechanism, their advantage
   is that you can still run your tests in async mode. The downside
   is that you need to explicitly control and allow every single
@@ -153,7 +154,7 @@ defmodule Ecto.Adapters.SQL.Sandbox do
 
   There are two mechanisms for explicit ownerships:
 
-    * Using allowances - requires explicit allowances.
+    * Using allowances - requires explicit allowances via `allow/3`.
       Tests may run concurrently.
 
     * Using shared mode - does not require explicit allowances.
@@ -416,26 +417,17 @@ defmodule Ecto.Adapters.SQL.Sandbox do
   end
 
   @doc """
-  Starts a process that will check out and own a connection, then returns that process's pid.
+  Starts a process that owns the connection and returns its pid.
 
-  The process is not linked to the caller, so it is your responsibility to ensure that it will be
-  stopped with `stop_owner/1`. In tests, this is done in  an `ExUnit.Callbacks.on_exit/2` callback:
+  The owner process is not linked to the caller, it is your responsibility to
+  ensure it will be stopped. In tests, this is done by terminating the pool
+  in an `ExUnit.Callbacks.on_exit/2` callback:
 
       setup tags do
         pid = Ecto.Adapters.SQL.Sandbox.start_owner!(MyApp.Repo, shared: not tags[:async])
         on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
         :ok
       end
-
-  ## `start_owner!/2` vs `checkout/2`
-
-  `start_owner!/2` should be used in place of `checkout/2`.
-
-  `start_owner!/2` solves the problem of unlinked processes started in a test outliving the test process and causing ownership errors.
-  For example, `LiveView`'s `live(...)` test helper starts a process linked to the LiveView supervisor, not the test process.
-  These errors can be eliminated by having the owner of the connection be a separate process from the test process.
-
-  Outside of that scenario, `checkout/2` involves less overhead than this function and so can be preferable.
 
   ## Options
 
@@ -506,7 +498,7 @@ defmodule Ecto.Adapters.SQL.Sandbox do
   process set the ownership mode to `{:shared, _}` and is still alive.
   """
   @spec mode(Ecto.Repo.t() | pid(), :auto | :manual | {:shared, pid()}) ::
-          :ok | :already_shared | :not_owner | :not_found
+          :ok | :already_shared | :now_owner | :not_found
   def mode(repo, mode)
       when (is_atom(repo) or is_pid(repo)) and mode in [:auto, :manual]
       when (is_atom(repo) or is_pid(repo)) and elem(mode, 0) == :shared and is_pid(elem(mode, 1)) do
@@ -602,11 +594,10 @@ defmodule Ecto.Adapters.SQL.Sandbox do
   """
   @spec allow(Ecto.Repo.t() | pid(), pid(), term()) ::
           :ok | {:already, :owner | :allowed} | :not_found
-  def allow(repo, parent, allow, opts \\ []) when is_atom(repo) or is_pid(repo) do
+  def allow(repo, parent, allow, _opts \\ []) when is_atom(repo) or is_pid(repo) do
     case GenServer.whereis(allow) do
       pid when is_pid(pid) ->
-        %{pid: pool, opts: meta_opts} = lookup_meta!(repo)
-        opts = Keyword.merge(meta_opts, opts)
+        %{pid: pool, opts: opts} = lookup_meta!(repo)
         DBConnection.Ownership.ownership_allow(pool, parent, pid, opts)
 
       other ->

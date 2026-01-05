@@ -16,17 +16,17 @@
 Take this HTML as an example:
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html>
-  <body>
-    <section id="content">
-      <p class="headline">Floki</p>
-      <span class="headline">Enables search using CSS selectors</span>
-      <a href="https://github.com/philss/floki">Github page</a>
-      <span data-model="user">philss</span>
-    </section>
-    <a href="https://hex.pm/packages/floki">Hex package</a>
-  </body>
+<body>
+  <section id="content">
+    <p class="headline">Floki</p>
+    <span class="headline">Enables search using CSS selectors</span>
+    <a href="https://github.com/philss/floki">Github page</a>
+    <span data-model="user">philss</span>
+  </section>
+  <a href="https://hex.pm/packages/floki">Hex package</a>
+</body>
 </html>
 ```
 
@@ -40,7 +40,7 @@ Floki.find(document, "p.headline")
 
 document
 |> Floki.find("p.headline")
-|> Floki.raw_html()
+|> Floki.raw_html
 # => <p class="headline">Floki</p>
 ```
 
@@ -61,7 +61,7 @@ Add Floki to your `mix.exs`:
 ```elixir
 defp deps do
   [
-    {:floki, "~> 0.38.0"}
+    {:floki, "~> 0.36.0"}
   ]
 end
 ```
@@ -72,7 +72,7 @@ If you are running on [Livebook](https://livebook.dev) or a script, you can inst
 
 ```elixir
 Mix.install([
-  {:floki, "~> 0.38.0"}
+  {:floki, "~> 0.36.0"}
 ])
 ```
 
@@ -128,8 +128,8 @@ you don't need to install anything to compile it thanks to [RustlerPrecompiled](
 ```elixir
 defp deps do
   [
-    {:floki, "~> 0.38.0"},
-    {:html5ever, "~> 0.16.0"}
+    {:floki, "~> 0.36.0"},
+    {:html5ever, "~> 0.15.0"}
   ]
 end
 ```
@@ -156,7 +156,7 @@ First, add `fast_html` to your dependencies:
 ```elixir
 defp deps do
   [
-    {:floki, "~> 0.38.0"},
+    {:floki, "~> 0.36.0"},
     {:fast_html, "~> 2.0"}
   ]
 end
@@ -201,7 +201,7 @@ To convert your node tree back to raw HTML (spaces are ignored):
 ```elixir
 document
 |> Floki.find(".example")
-|> Floki.raw_html()
+|> Floki.raw_html
 # =>  <div class="example"></div>
 ```
 
@@ -226,7 +226,7 @@ If you want to get the text from an element, try:
 ```elixir
 document
 |> Floki.find(".headline")
-|> Floki.text()
+|> Floki.text
 
 # => "Floki"
 ```
@@ -235,49 +235,42 @@ document
 
 Here you find all the [CSS selectors](https://www.w3.org/TR/selectors/#selectors) supported in the current version:
 
-| Pattern               | Description                                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| \*                    | any element                                                                                                               |
-| E                     | an element of type `E`                                                                                                    |
-| E[foo]                | an `E` element with a "foo" attribute                                                                                     |
-| E[foo="bar"]          | an E element whose "foo" attribute value is exactly equal to "bar"                                                        |
-| E[foo~="bar"]         | an E element whose "foo" attribute value is a list of whitespace-separated values, one of which is exactly equal to "bar" |
-| E[foo^="bar"]         | an E element whose "foo" attribute value begins exactly with the string "bar"                                             |
-| E[foo$="bar"]         | an E element whose "foo" attribute value ends exactly with the string "bar"                                               |
-| E[foo*="bar"]         | an E element whose "foo" attribute value contains the substring "bar"                                                     |
-| E[foo\|="en"]         | an E element whose "foo" attribute has a hyphen-separated list of values beginning (from the left) with "en"              |
-| E:nth-child(n)        | an E element, the n-th child of its parent                                                                                |
-| E:nth-last-child(n)   | an E element, the n-th child of its parent, counting from bottom to up                                                    |
-| E:first-child         | an E element, first child of its parent                                                                                   |
-| E:last-child          | an E element, last child of its parent                                                                                    |
-| E:nth-of-type(n)      | an E element, the n-th child of its type among its siblings                                                               |
-| E:nth-last-of-type(n) | an E element, the n-th child of its type among its siblings, counting from bottom to up                                   |
-| E:first-of-type       | an E element, first child of its type among its siblings                                                                  |
-| E:last-of-type        | an E element, last child of its type among its siblings                                                                   |
-| E:checked             | An E element (checkbox, radio, or option) that is checked                                                                 |
-| E:disabled            | An E element (button, input, select, textarea, or option) that is disabled                                                |
-| E.warning             | an E element whose class is "warning"                                                                                     |
-| E#myid                | an E element with ID equal to "myid" (for ids containing periods, use `#my\\.id` or `[id="my.id"]`)                       |
-| E:not(s)              | an E element that does not match simple selector s                                                                        |
-| E:has(s)              | an E element that has a child element that matches simple selector s                                                      |
-| E:has(s1, s2)         | an E element that has a child element matching simple selector s1 OR s2                                                   |
-| E:has(s1):has(s2)     | An E element that has a child element matching simple selectors s1 AND s2                                                 |
-| :root                 | the root node or nodes (in case of fragments) of the document. Most of the times this is the `html` tag                   |
-| E F                   | an F element descendant of an E element                                                                                   |
-| E > F                 | an F element child of an E element                                                                                        |
-| E + F                 | an F element immediately preceded by an E element                                                                         |
-| E ~ F                 | an F element preceded by an E element                                                                                     |
+| Pattern         | Description                  |
+|-----------------|------------------------------|
+| *               | any element                  |
+| E               | an element of type `E`       |
+| E[foo]          | an `E` element with a "foo" attribute |
+| E[foo="bar"]    | an E element whose "foo" attribute value is exactly equal to "bar" |
+| E[foo~="bar"]   | an E element whose "foo" attribute value is a list of whitespace-separated values, one of which is exactly equal to "bar" |
+| E[foo^="bar"]   | an E element whose "foo" attribute value begins exactly with the string "bar" |
+| E[foo$="bar"]   | an E element whose "foo" attribute value ends exactly with the string "bar" |
+| E[foo*="bar"]   | an E element whose "foo" attribute value contains the substring "bar" |
+| E[foo\|="en"]    | an E element whose "foo" attribute has a hyphen-separated list of values beginning (from the left) with "en" |
+| E:nth-child(n)  | an E element, the n-th child of its parent |
+| E:nth-last-child(n)  | an E element, the n-th child of its parent, counting from bottom to up |
+| E:first-child   | an E element, first child of its parent |
+| E:last-child   | an E element, last child of its parent |
+| E:nth-of-type(n)  | an E element, the n-th child of its type among its siblings |
+| E:nth-last-of-type(n)  | an E element, the n-th child of its type among its siblings, counting from bottom to up |
+| E:first-of-type   | an E element, first child of its type among its siblings |
+| E:last-of-type   | an E element, last child of its type among its siblings |
+| E:checked       | An E element (checkbox, radio, or option) that is checked |
+| E:disabled      | An E element (button, input, select, textarea, or option) that is disabled |
+| E.warning       | an E element whose class is "warning" |
+| E#myid          | an E element with ID equal to "myid" (for ids containing periods, use `#my\\.id` or `[id="my.id"]`) |
+| E:not(s)        | an E element that does not match simple selector s |
+| :root           | the root node or nodes (in case of fragments) of the document. Most of the times this is the `html` tag |
+| E F             | an F element descendant of an E element |
+| E > F           | an F element child of an E element |
+| E + F           | an F element immediately preceded by an E element |
+| E ~ F           | an F element preceded by an E element |
 
 There are also some selectors based on non-standard specifications. They are:
 
 | Pattern               | Description                                                            |
-| --------------------- | ---------------------------------------------------------------------- |
+|-----------------------|------------------------------------------------------------------------|
 | E:fl-contains('foo')  | an E element that contains "foo" inside a text node                    |
 | E:fl-icontains('foo') | an E element that contains "foo" inside a text node (case insensitive) |
-
-### Simple selectors
-
-The pseudo-selectors `:has` and `:not` currently only support simple selectors. Simple selectors are all of the selectors except those that take another selector as an argument, so anything except `:not`, `:has`, `>`, `+` and `~`.
 
 ## Suppressing log messages
 
@@ -289,7 +282,7 @@ See https://hexdocs.pm/logger/Logger.html#module-compile-configuration for detai
 
 ## Special thanks
 
-- [@arasatasaygin](https://github.com/arasatasaygin) for Floki's logo from the [Open Logos project](http://openlogos.org/).
+* [@arasatasaygin](https://github.com/arasatasaygin) for Floki's logo from the [Open Logos project](http://openlogos.org/).
 
 ## License
 

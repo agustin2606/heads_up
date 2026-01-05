@@ -13,19 +13,18 @@ defmodule Bandit.HTTP2.StreamProcess do
           Bandit.HTTP2.Stream.t(),
           Bandit.Pipeline.plug_def(),
           Bandit.Telemetry.t(),
-          Bandit.Pipeline.conn_data(),
           keyword()
         ) :: GenServer.on_start()
-  def start_link(stream, plug, connection_span, conn_data, opts) do
-    GenServer.start_link(__MODULE__, {stream, plug, connection_span, conn_data, opts})
+  def start_link(stream, plug, connection_span, opts) do
+    GenServer.start_link(__MODULE__, {stream, plug, connection_span, opts})
   end
 
   @impl GenServer
   def init(state), do: {:ok, state, {:continue, :start_stream}}
 
   @impl GenServer
-  def handle_continue(:start_stream, {stream, plug, connection_span, conn_data, opts} = state) do
-    _ = Bandit.Pipeline.run(stream, plug, connection_span, conn_data, opts)
+  def handle_continue(:start_stream, {stream, plug, connection_span, opts} = state) do
+    _ = Bandit.Pipeline.run(stream, plug, connection_span, opts)
     {:stop, :normal, state}
   end
 end

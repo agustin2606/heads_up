@@ -123,15 +123,7 @@ defmodule Swoosh.Adapters.ZeptoMail do
         {:ok, %{id: Swoosh.json_library().decode!(body)["request_id"]}}
 
       {:ok, code, _headers, body} when code > 399 ->
-        reason =
-          body
-          |> Swoosh.json_library().decode()
-          |> case do
-            {:ok, decoded} -> decoded
-            {:error, _reason} -> body
-          end
-
-        {:error, {code, reason}}
+        {:error, {code, Swoosh.json_library().decode!(body)}}
 
       {:error, reason} ->
         {:error, reason}

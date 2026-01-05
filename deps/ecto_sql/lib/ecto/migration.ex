@@ -89,7 +89,7 @@ defmodule Ecto.Migration do
   For the rest of this document, we will cover the migration APIs
   provided by Ecto. For a in-depth discussion of migrations and how
   to use them safely within your application and data, see the
-  [Safe Ecto Migrations guide](https://github.com/fly-apps/safe-ecto-migrations).
+  [Safe Ecto Migrations guide](https://fly.io/phoenix-files/safe-ecto-migrations/).
 
   ## Mix tasks
 
@@ -184,39 +184,6 @@ defmodule Ecto.Migration do
   To avoid that we recommend to use `execute/2` with anonymous functions instead.
   For more information and example usage please take a look at `execute/2` function.
 
-  ## Formatter configuration
-
-  To enable Ecto's custom `mix format` rules in your migrations, you can create a new formatter
-  config file in your project called `priv/[your_repo]/migrations/.formatter.exs` with the
-  following content:
-
-  ```elixir
-  [
-    import_deps: [:ecto_sql],
-    inputs: ["*.exs"]
-  ]
-  ```
-
-  You will also need to add a line or two to your project's main formatter config so that the
-  formatter knows where to find the new config file. Update (or create) your project's main
-  `.formatter.exs` file:
-
-  ```elixir
-  [
-    # Add this line to enable Ecto formatter rules
-    import_deps: [:ecto],
-
-    # Add this line to enable Ecto's formatter rules in your migrations directory
-    subdirectories: ["priv/*/migrations"],
-
-    # Default Elixir project rules
-    inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]
-  ]
-  ```
-
-  Now, when you run `mix format`, the formatter should apply Ecto's custom rules when formatting
-  your migrations (e.g. no brackets are automatically added when creating columns with `add/3`).
-
   ## Repo configuration
 
   ### Migrator configuration
@@ -307,26 +274,6 @@ defmodule Ecto.Migration do
 
           config :app, App.Repo, migration_default_prefix: "my_prefix"
 
-  ## Collations
-
-  Collations can be set on a column with the option `:collation`. This can be
-  useful when relying on ASCII sorting of characters when using a fractional index
-  for example. All supported collations and types that support setting a collocation
-  are not known by `ecto_sql` and specifying an incorrect collation or a collation on
-  an unsupported type might cause a migration to fail. Be sure to match the collation
-  on any column that references another column.
-
-      def change do
-        create table(:collate_reference) do
-          add :name, :string, collation: "POSIX"
-        end
-
-        create table(:collate) do
-          add :string, :string, collation: "POSIX"
-          add :name_ref, references(:collate_reference, type: :string, column: :name), collation: "POSIX"
-        end
-      end
-
   ## Comments
 
   Migrations where you create or alter a table support specifying table
@@ -405,7 +352,7 @@ defmodule Ecto.Migration do
 
   ## Additional resources
 
-    * The [Safe Ecto Migrations guide](https://github.com/fly-apps/safe-ecto-migrations)
+    * The [Safe Ecto Migrations guide](https://fly.io/phoenix-files/safe-ecto-migrations/)
 
   """
 
@@ -446,21 +393,11 @@ defmodule Ecto.Migration do
               comment: nil,
               options: nil
 
-    @type column :: atom | String.t() | {index_dir(), atom | String.t()}
-
-    @type index_dir ::
-            :asc
-            | :asc_nulls_first
-            | :asc_nulls_last
-            | :desc
-            | :desc_nulls_first
-            | :desc_nulls_last
-
     @type t :: %__MODULE__{
             table: String.t(),
             prefix: String.t() | nil,
-            name: String.t() | atom,
-            columns: [column()],
+            name: atom,
+            columns: [atom | String.t()],
             unique: boolean,
             concurrently: boolean,
             using: atom | String.t(),
@@ -751,11 +688,7 @@ defmodule Ecto.Migration do
   end
 
   @doc """
-  Drops one of the following if it exists:
-
-    * an index
-    * a table
-    * a constraint
+  Drops a table or index if it exists.
 
   Does not raise an error if the specified table or index does not exist.
 
@@ -763,7 +696,6 @@ defmodule Ecto.Migration do
 
       drop_if_exists index("posts", [:name])
       drop_if_exists table("posts")
-      drop_if_exists constraint("products", "price_must_be_positive")
       drop_if_exists index("posts", [:name]), mode: :cascade
       drop_if_exists table("posts"), mode: :cascade
 
@@ -774,10 +706,12 @@ defmodule Ecto.Migration do
       on the table. Default is `:restrict`
 
   """
-  def drop_if_exists(%{} = index_or_table_or_constraint, opts \\ []) when is_list(opts) do
-    mode = Keyword.get(opts, :mode, :restrict)
-    Runner.execute({:drop_if_exists, __prefix__(index_or_table_or_constraint), mode})
-    index_or_table_or_constraint
+  def drop_if_exists(%{} = index_or_table, opts \\ []) when is_list(opts) do
+    Runner.execute(
+      {:drop_if_exists, __prefix__(index_or_table), Keyword.get(opts, :mode, :restrict)}
+    )
+
+    index_or_table
   end
 
   @doc """
@@ -845,8 +779,7 @@ defmodule Ecto.Migration do
 
   ## Options
 
-    * `:name` - the name of the index. Can be provided as a string or an atom.
-    Defaults to "#{table}_#{column}_index".
+    * `:name` - the name of the index. Defaults to "#{table}_#{column}_index".
     * `:prefix` - specify an optional prefix for the index.
     * `:unique` - indicates whether the index should be unique. Defaults to `false`.
     * `:comment` - adds a comment to the index.
@@ -957,24 +890,6 @@ defmodule Ecto.Migration do
       create index("products", [:sku, :category_id], unique: true)
       create index("products", [:sku], unique: true, where: "category_id IS NULL")
 
-  ## Sorting direction
-
-  You can specify the sorting direction of the index by using a keyword list:
-
-      create index("products", [desc: sku])
-
-  The following keywords are supported:
-
-    * `:asc`
-    * `:asc_nulls_last`
-    * `:asc_nulls_first`
-    * `:desc`
-    * `:desc_nulls_last`
-    * `:desc_nulls_first`
-
-  The `*_nulls_first` and `*_nulls_last` variants are not supported by all
-  databases.
-
   ## Examples
 
       # With no name provided, the name of the below index defaults to
@@ -1041,17 +956,16 @@ defmodule Ecto.Migration do
   defp default_index_name(index) do
     [index.table, index.columns, "index"]
     |> List.flatten()
-    |> Enum.map_join("_", &column_name/1)
+    |> Enum.map_join(
+      "_",
+      fn item ->
+        item
+        |> to_string()
+        |> String.replace(~r"[^\w]", "_")
+        |> String.replace_trailing("_", "")
+      end
+    )
     |> String.to_atom()
-  end
-
-  defp column_name({_dir, column}), do: column_name(column)
-
-  defp column_name(column) do
-    column
-    |> to_string()
-    |> String.replace(~r"[^\w]", "_")
-    |> String.replace_trailing("_", "")
   end
 
   @doc """
@@ -1222,7 +1136,6 @@ defmodule Ecto.Migration do
       specified.
     * `:scale` - the scale of a numeric type. Defaults to `0`.
     * `:comment` - adds a comment to the added column.
-    * `:collation` - the collation of the text type.
     * `:after` - positions field after the specified one. Only supported on MySQL,
       it is ignored by other databases.
     * `:generated` - a string representing the expression for a generated column. See
@@ -1281,7 +1194,7 @@ defmodule Ecto.Migration do
   end
 
   def rename(%Index{} = current_index, to: new_name) do
-    Runner.execute({:rename, __prefix__(current_index), new_name})
+    Runner.execute({:rename, current_index, new_name})
     %{current_index | name: new_name}
   end
 
@@ -1316,8 +1229,8 @@ defmodule Ecto.Migration do
   @doc """
   Adds `:inserted_at` and `:updated_at` timestamp columns.
 
-  Those columns are of `:naive_datetime` type. A list of `opts` can be given
-  to customize the generated fields.
+  Those columns are of `:naive_datetime` type and by default cannot be null. A
+  list of `opts` can be given to customize the generated fields.
 
   Following options will override the repo configuration specified by
   `:migration_timestamps` option.
@@ -1333,8 +1246,6 @@ defmodule Ecto.Migration do
     * `:default` - the columns' default value. It can be a string, number, empty
       list, list of strings, list of numbers, or a fragment generated by
       `fragment/1`.
-    * `:null` - determines whether the column accepts null values. Defaults to
-      `false`.
 
   """
   def timestamps(opts \\ []) when is_list(opts) do
@@ -1404,7 +1315,6 @@ defmodule Ecto.Migration do
       specified.
     * `:scale` - the scale of a numeric type. Defaults to `0`.
     * `:comment` - adds a comment to the modified column.
-    * `:collation` - the collation of the text type.
   """
   def modify(column, type, opts \\ []) when is_atom(column) and is_list(opts) do
     validate_precision_opts!(opts, column)
@@ -1515,8 +1425,8 @@ defmodule Ecto.Migration do
       the example above), or `nil`.
     * `:type` - The foreign key type, which defaults to `:bigserial`.
     * `:on_delete` - What to do if the referenced entry is deleted. May be
-      `:nothing` (default), `:delete_all`, `:nilify_all`, `{:nilify, columns}`, `:default_all`, `{:default, columns}`
-      or `:restrict`. `{:nilify, columns}` and `{:default, columns}` expect a list of atoms for `columns`
+      `:nothing` (default), `:delete_all`, `:nilify_all`, `{:nilify, columns}`,
+      or `:restrict`. `{:nilify, columns}` expects a list of atoms for `columns`
       and is not supported by all databases.
     * `:on_update` - What to do if the referenced entry is updated. May be
       `:nothing` (default), `:update_all`, `:nilify_all`, or `:restrict`.
@@ -1561,14 +1471,13 @@ defmodule Ecto.Migration do
   end
 
   defp check_on_delete!(on_delete)
-       when on_delete in [:nothing, :delete_all, :nilify_all, :default_all, :restrict],
+       when on_delete in [:nothing, :delete_all, :nilify_all, :restrict],
        do: :ok
 
-  defp check_on_delete!({option, columns})
-       when option in [:nilify, :default] and is_list(columns) do
+  defp check_on_delete!({:nilify, columns}) when is_list(columns) do
     unless Enum.all?(columns, &is_atom/1) do
       raise ArgumentError,
-            "expected `columns` in `{#{inspect(option)}, columns}` to be a list of atoms, got: #{inspect(columns)}"
+            "expected `columns` in `{:nilify, columns}` to be a list of atoms, got: #{inspect(columns)}"
     end
 
     :ok
@@ -1627,7 +1536,7 @@ defmodule Ecto.Migration do
     end
   ```
 
-  See the [Safe Ecto Migrations guide](https://github.com/fly-apps/safe-ecto-migrations) for an
+  See the [Safe Ecto Migrations guide](https://fly.io/phoenix-files/safe-ecto-migrations/) for an
   in-depth explanation of the benefits of this approach.
   """
   def constraint(table, name, opts \\ [])

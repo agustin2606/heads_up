@@ -30,12 +30,12 @@ defmodule Swoosh.Adapters.Scaleway do
       |> to("shushu@example.com")
       |> subject("Hello, Wally!")
       |> text_body("Hello")
-      |> header("Reply-To", "support@example.com")
       |> put_provider_option(:send_before, ~U[2022-11-15 11:00:00Z])
 
   ## Provider Options
 
-    * `send_before` (RFC 3339 format) - maximum date to deliver the email.
+    * `send_before` (RFC 3339 format) - `send_before`, maximum date to deliver the email.
+
   """
 
   use Swoosh.Adapter, required_config: [:project_id, :secret_key]
@@ -48,7 +48,7 @@ defmodule Swoosh.Adapters.Scaleway do
   defp base_url(config), do: config[:base_url] || @base_url
 
   def deliver(%Email{} = email, config \\ []) do
-    headers = request_headers(config)
+    headers = prepare_headers(config)
     body = email |> prepare_payload(config[:project_id]) |> Swoosh.json_library().encode!
     url = [base_url(config), @api_endpoint]
 
@@ -67,7 +67,7 @@ defmodule Swoosh.Adapters.Scaleway do
     end
   end
 
-  defp request_headers(config) do
+  defp prepare_headers(config) do
     [
       {"Accept", "application/json"},
       {"Content-Type", "application/json"},
@@ -145,8 +145,7 @@ defmodule Swoosh.Adapters.Scaleway do
   defp prepare_headers(payload, %{headers: map}) when map_size(map) == 0, do: payload
 
   defp prepare_headers(payload, %{headers: headers}) do
-    additional = Enum.map(headers, fn {k, v} -> %{key: k, value: v} end)
-    Map.put(payload, "additional_headers", additional)
+    Map.put(payload, "headers", headers)
   end
 
   defp prepare_params(payload, %{provider_options: %{params: params}}) when is_map(params) do

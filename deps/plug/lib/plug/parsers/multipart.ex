@@ -146,6 +146,12 @@ defmodule Plug.Parsers.MULTIPART do
 
   ## Multipart
 
+  defp parse_multipart(conn, {m2p, {module, fun, args}, header_opts, opts}) do
+    # TODO: Remove me once the deprecation is removed
+    limit = apply(module, fun, args)
+    parse_multipart(conn, {m2p, limit, header_opts, opts})
+  end
+
   defp parse_multipart(conn, {m2p, limit, headers_opts, opts}) do
     read_result = Plug.Conn.read_part_headers(conn, headers_opts)
     {:ok, limit, acc, conn} = parse_multipart(read_result, limit, opts, headers_opts, [])

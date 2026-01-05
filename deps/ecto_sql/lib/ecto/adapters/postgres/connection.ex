@@ -90,7 +90,9 @@ if Code.ensure_loaded?(Postgrex) do
       do: []
 
     defp strip_quotes(quoted) do
-      binary_part(quoted, 1, byte_size(quoted) - 2)
+      size = byte_size(quoted) - 2
+      <<_, unquoted::binary-size(size), _>> = quoted
+      unquoted
     end
 
     ## Query
@@ -244,7 +246,7 @@ if Code.ensure_loaded?(Postgrex) do
         quote_name(prefix, table),
         insert_as(on_conflict),
         values,
-        on_conflict(on_conflict) | returning(returning)
+        on_conflict(on_conflict, header) | returning(returning)
       ]
     end
 
@@ -257,16 +259,16 @@ if Code.ensure_loaded?(Postgrex) do
       []
     end
 
-    defp on_conflict({:raise, _, []}),
+    defp on_conflict({:raise, _, []}, _header),
       do: []
 
-    defp on_conflict({:nothing, _, targets}),
+    defp on_conflict({:nothing, _, targets}, _header),
       do: [" ON CONFLICT ", conflict_target(targets) | "DO NOTHING"]
 
-    defp on_conflict({fields, _, targets}) when is_list(fields),
+    defp on_conflict({fields, _, targets}, _header) when is_list(fields),
       do: [" ON CONFLICT ", conflict_target!(targets), "DO " | replace(fields)]
 
-    defp on_conflict({query, _, targets}),
+    defp on_conflict({query, _, targets}, _header),
       do: [" ON CONFLICT ", conflict_target!(targets), "DO " | update_all(query, "UPDATE SET ")]
 
     defp conflict_target!([]),
@@ -914,13 +916,12 @@ if Code.ensure_loaded?(Postgrex) do
     end
 
     defp expr({{:., _, [{:parent_as, _, [as]}, field]}, _, []}, _sources, query)
-         when is_atom(field) or is_binary(field) do
+         when is_atom(field) do
       {ix, sources} = get_parent_sources_ix(query, as)
       quote_qualified_name(field, sources, ix)
     end
 
-    defp expr({{:., _, [{:&, _, [idx]}, field]}, _, []}, sources, _query)
-         when is_atom(field) or is_binary(field) do
+    defp expr({{:., _, [{:&, _, [idx]}, field]}, _, []}, sources, _query) when is_atom(field) do
       quote_qualified_name(field, sources, idx)
     end
 
@@ -985,16 +986,8 @@ if Code.ensure_loaded?(Postgrex) do
       [?(, values_list(types, idx + 1, num_rows), ?)]
     end
 
-    defp expr({:identifier, _, [literal]}, _sources, _query) do
+    defp expr({:literal, _, [literal]}, _sources, _query) do
       quote_name(literal)
-    end
-
-    defp expr({:constant, _, [literal]}, _sources, _query) when is_binary(literal) do
-      [?', escape_string(literal), ?']
-    end
-
-    defp expr({:constant, _, [literal]}, _sources, _query) when is_number(literal) do
-      [to_string(literal)]
     end
 
     defp expr({:splice, _, [{:^, _, [idx, length]}]}, _sources, _query) do
@@ -1139,12 +1132,12 @@ if Code.ensure_loaded?(Postgrex) do
     end
 
     defp json_extract_path(expr, path, sources, query) do
-      path = Enum.map_intersperse(path, ?,, &escape_json(&1, sources, query))
-      [?(, expr(expr, sources, query), "#>array[", path, "]::text[])"]
+      path = Enum.map_intersperse(path, ?,, &escape_json/1)
+      [?(, expr(expr, sources, query), "#>'{", path, "}')"]
     end
 
     defp values_list(types, idx, num_rows) do
-      rows = :lists.seq(1, num_rows, 1)
+      rows = Enum.to_list(1..num_rows)
 
       [
         "VALUES ",
@@ -1303,7 +1296,7 @@ if Code.ensure_loaded?(Postgrex) do
 
     def execute_ddl({command, %Index{} = index}) when command in @creates do
       fields = Enum.map_intersperse(index.columns, ", ", &index_expr/1)
-      include_fields = Enum.map_intersperse(index.include, ", ", &include_expr/1)
+      include_fields = Enum.map_intersperse(index.include, ", ", &index_expr/1)
 
       maybe_nulls_distinct =
         case index.nulls_distinct do
@@ -1553,8 +1546,6 @@ if Code.ensure_loaded?(Postgrex) do
     end
 
     defp column_change(table, {:modify, name, %Reference{} = ref, opts}) do
-      collation = Keyword.fetch(opts, :collation)
-
       [
         drop_reference_expr(opts[:from], table, name),
         "ALTER COLUMN ",
@@ -1564,14 +1555,11 @@ if Code.ensure_loaded?(Postgrex) do
         ", ADD ",
         reference_expr(ref, table, name),
         modify_null(name, opts),
-        modify_default(name, ref.type, opts),
-        collation_expr(collation)
+        modify_default(name, ref.type, opts)
       ]
     end
 
     defp column_change(table, {:modify, name, type, opts}) do
-      collation = Keyword.fetch(opts, :collation)
-
       [
         drop_reference_expr(opts[:from], table, name),
         "ALTER COLUMN ",
@@ -1579,8 +1567,7 @@ if Code.ensure_loaded?(Postgrex) do
         " TYPE ",
         column_type(type, opts),
         modify_null(name, opts),
-        modify_default(name, type, opts),
-        collation_expr(collation)
+        modify_default(name, type, opts)
       ]
     end
 
@@ -1628,17 +1615,13 @@ if Code.ensure_loaded?(Postgrex) do
     defp column_options(type, opts) do
       default = Keyword.fetch(opts, :default)
       null = Keyword.get(opts, :null)
-      collation = Keyword.fetch(opts, :collation)
 
-      [default_expr(default, type), null_expr(null), collation_expr(collation)]
+      [default_expr(default, type), null_expr(null)]
     end
 
     defp null_expr(false), do: " NOT NULL"
     defp null_expr(true), do: " NULL"
     defp null_expr(_), do: []
-
-    defp collation_expr({:ok, collation_name}), do: " COLLATE \"#{collation_name}\""
-    defp collation_expr(_), do: []
 
     defp new_constraint_expr(%Constraint{check: check} = constraint) when is_binary(check) do
       [
@@ -1712,41 +1695,10 @@ if Code.ensure_loaded?(Postgrex) do
             ":default may be a string, number, boolean, list of strings, list of integers, map (when type is Map), or a fragment(...)"
         )
 
-    defp index_expr({dir, literal}) when is_binary(literal),
-      do: index_dir(dir, literal)
-
-    defp index_expr({dir, literal}),
-      do: index_dir(dir, quote_name(literal))
-
     defp index_expr(literal) when is_binary(literal),
       do: literal
 
     defp index_expr(literal),
-      do: quote_name(literal)
-
-    defp index_dir(dir, str)
-         when dir in [
-                :asc,
-                :asc_nulls_first,
-                :asc_nulls_last,
-                :desc,
-                :desc_nulls_first,
-                :desc_nulls_last
-              ] do
-      case dir do
-        :asc -> [str | " ASC"]
-        :asc_nulls_first -> [str | " ASC NULLS FIRST"]
-        :asc_nulls_last -> [str | " ASC NULLS LAST"]
-        :desc -> [str | " DESC"]
-        :desc_nulls_first -> [str | " DESC NULLS FIRST"]
-        :desc_nulls_last -> [str | " DESC NULLS LAST"]
-      end
-    end
-
-    defp include_expr(literal) when is_binary(literal),
-      do: literal
-
-    defp include_expr(literal),
       do: quote_name(literal)
 
     defp options_expr(nil),
@@ -1758,85 +1710,102 @@ if Code.ensure_loaded?(Postgrex) do
     defp options_expr(options),
       do: [?\s, options]
 
-    defp column_type(type, opts) do
-      type_name = column_type_name(type, opts)
+    defp column_type({:array, type}, opts),
+      do: [column_type(type, opts), "[]"]
 
-      case Keyword.get(opts, :generated) do
-        nil when type == :identity ->
-          cleanup = fn v -> is_integer(v) and v > 0 end
-
-          sequence =
-            [Keyword.get(opts, :start_value)]
-            |> Enum.filter(cleanup)
-            |> Enum.map(&"START WITH #{&1}")
-            |> Kernel.++(
-              [Keyword.get(opts, :increment)]
-              |> Enum.filter(cleanup)
-              |> Enum.map(&"INCREMENT BY #{&1}")
-            )
-
-          case sequence do
-            [] -> [type_name, " GENERATED BY DEFAULT AS IDENTITY"]
-            _ -> [type_name, " GENERATED BY DEFAULT AS IDENTITY(", Enum.join(sequence, " "), ") "]
-          end
-
-        nil ->
-          type_name
-
-        expr when is_binary(expr) ->
-          [type_name, " GENERATED ", expr]
-
-        other ->
-          raise ArgumentError,
-                "the `:generated` option only accepts strings, received: #{inspect(other)}"
-      end
+    defp column_type(type, opts) when type in ~w(time utc_datetime naive_datetime)a do
+      generated = Keyword.get(opts, :generated)
+      [ecto_to_db(type), "(0)", generated_expr(generated)]
     end
 
-    defp column_type_name({:array, type}, opts) do
-      [column_type_name(type, opts), "[]"]
-    end
-
-    defp column_type_name(type, _opts) when type in ~w(time utc_datetime naive_datetime)a do
-      [ecto_to_db(type), "(0)"]
-    end
-
-    defp column_type_name(type, opts)
+    defp column_type(type, opts)
          when type in ~w(time_usec utc_datetime_usec naive_datetime_usec)a do
       precision = Keyword.get(opts, :precision)
+      generated = Keyword.get(opts, :generated)
       type_name = ecto_to_db(type)
 
-      if precision do
-        [type_name, ?(, to_string(precision), ?)]
+      type =
+        if precision do
+          [type_name, ?(, to_string(precision), ?)]
+        else
+          type_name
+        end
+
+      [type, generated_expr(generated)]
+    end
+
+    defp column_type(:identity, opts) do
+      start_value = [Keyword.get(opts, :start_value)]
+      increment = [Keyword.get(opts, :increment)]
+      generated = Keyword.get(opts, :generated)
+      type_name = ecto_to_db(:identity)
+
+      if generated do
+        [type_name, generated_expr(generated)]
       else
-        type_name
+        cleanup = fn v -> is_integer(v) and v > 0 end
+
+        sequence =
+          start_value
+          |> Enum.filter(cleanup)
+          |> Enum.map(&"START WITH #{&1}")
+          |> Kernel.++(
+            increment
+            |> Enum.filter(cleanup)
+            |> Enum.map(&"INCREMENT BY #{&1}")
+          )
+
+        case sequence do
+          [] -> [type_name, " GENERATED BY DEFAULT AS IDENTITY"]
+          _ -> [type_name, " GENERATED BY DEFAULT AS IDENTITY(", Enum.join(sequence, " "), ") "]
+        end
       end
     end
 
-    defp column_type_name(:duration, opts) do
+    defp column_type(:duration, opts) do
       precision = Keyword.get(opts, :precision)
       fields = Keyword.get(opts, :fields)
+      generated = Keyword.get(opts, :generated)
       type_name = ecto_to_db(:duration)
 
-      cond do
-        fields && precision -> [type_name, " ", fields, ?(, to_string(precision), ?)]
-        precision -> [type_name, ?(, to_string(precision), ?)]
-        fields -> [type_name, " ", fields]
-        true -> [type_name]
-      end
+      type =
+        cond do
+          fields && precision -> [type_name, " ", fields, ?(, to_string(precision), ?)]
+          precision -> [type_name, ?(, to_string(precision), ?)]
+          fields -> [type_name, " ", fields]
+          true -> [type_name]
+        end
+
+      [type, generated_expr(generated)]
     end
 
-    defp column_type_name(type, opts) do
+    defp column_type(type, opts) do
       size = Keyword.get(opts, :size)
       precision = Keyword.get(opts, :precision)
       scale = Keyword.get(opts, :scale)
+      generated = Keyword.get(opts, :generated)
       type_name = ecto_to_db(type)
 
-      cond do
-        size -> [type_name, ?(, to_string(size), ?)]
-        precision -> [type_name, ?(, to_string(precision), ?,, to_string(scale || 0), ?)]
-        type == :string -> [type_name, "(255)"]
-        true -> type_name
-      end
+      type =
+        cond do
+          size -> [type_name, ?(, to_string(size), ?)]
+          precision -> [type_name, ?(, to_string(precision), ?,, to_string(scale || 0), ?)]
+          type == :string -> [type_name, "(255)"]
+          true -> type_name
+        end
+
+      [type, generated_expr(generated)]
+    end
+
+    defp generated_expr(nil), do: []
+
+    defp generated_expr(expr) when is_binary(expr) do
+      [" GENERATED ", expr]
+    end
+
+    defp generated_expr(other) do
+      raise ArgumentError,
+            "the `:generated` option only accepts strings, received: #{inspect(other)}"
     end
 
     defp reference_expr(%Reference{} = ref, table, name) do
@@ -1890,11 +1859,6 @@ if Code.ensure_loaded?(Postgrex) do
 
     defp reference_on_delete({:nilify, columns}),
       do: [" ON DELETE SET NULL (", quote_names(columns), ")"]
-
-    defp reference_on_delete(:default_all), do: " ON DELETE SET DEFAULT"
-
-    defp reference_on_delete({:default, columns}),
-      do: [" ON DELETE SET DEFAULT (", quote_names(columns), ")"]
 
     defp reference_on_delete(:delete_all), do: " ON DELETE CASCADE"
     defp reference_on_delete(:restrict), do: " ON DELETE RESTRICT"
@@ -2017,26 +1981,6 @@ if Code.ensure_loaded?(Postgrex) do
 
     defp escape_json(true), do: ["true"]
     defp escape_json(false), do: ["false"]
-
-    # To allow columns in json paths, we use the array[...] syntax
-    # which requires special handling for strings and column references.
-    # We still keep the escape_json/1 variant for strings because it is
-    # needed for the queries using @>
-    defp escape_json(value, _, _) when is_binary(value) do
-      [?', escape_string(value), ?']
-    end
-
-    defp escape_json({{:., _, [{:&, _, [_]}, _]}, _, []} = expr, sources, query) do
-      expr(expr, sources, query)
-    end
-
-    defp escape_json({{:., _, [{:parent_as, _, [_]}, _]}, _, []} = expr, sources, query) do
-      expr(expr, sources, query)
-    end
-
-    defp escape_json(other, _, _) do
-      escape_json(other)
-    end
 
     defp ecto_to_db({:array, t}), do: [ecto_to_db(t), ?[, ?]]
     defp ecto_to_db(:id), do: "integer"

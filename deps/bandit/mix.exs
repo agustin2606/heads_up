@@ -4,7 +4,7 @@ defmodule Bandit.MixProject do
   def project do
     [
       app: :bandit,
-      version: "1.9.0",
+      version: "1.6.11",
       elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -16,10 +16,7 @@ defmodule Bandit.MixProject do
       package: [
         maintainers: ["Mat Trudel"],
         licenses: ["MIT"],
-        links: %{
-          "GitHub" => "https://github.com/mtrudel/bandit",
-          "Changelog" => "https://hexdocs.pm/bandit/changelog.html"
-        },
+        links: %{"GitHub" => "https://github.com/mtrudel/bandit"},
         files: ["lib", "mix.exs", "README*", "LICENSE*", "CHANGELOG*"]
       ],
       docs: docs()
@@ -33,7 +30,7 @@ defmodule Bandit.MixProject do
   defp deps do
     [
       {:thousand_island, "~> 1.0"},
-      {:plug, "~> 1.18"},
+      {:plug, "~> 1.14"},
       {:websock, "~> 0.5"},
       {:hpax, "~> 1.0"},
       {:telemetry, "~> 0.4 or ~> 1.0"},

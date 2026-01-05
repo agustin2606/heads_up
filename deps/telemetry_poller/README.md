@@ -1,6 +1,5 @@
 # telemetry_poller
 
-[![Test](https://github.com/beam-telemetry/telemetry_poller/actions/workflows/test.yml/badge.svg)](https://github.com/beam-telemetry/telemetry_poller/actions/workflows/test.yml)
 [![Codecov](https://codecov.io/gh/beam-telemetry/telemetry_poller/branch/master/graphs/badge.svg)](https://codecov.io/gh/beam-telemetry/telemetry_poller/branch/master/graphs/badge.svg)
 
 Allows to periodically collect measurements and dispatch them as Telemetry events.
@@ -9,8 +8,7 @@ Allows to periodically collect measurements and dispatch them as Telemetry event
 
   * `[vm, memory]` - contains the total memory, process memory, and all other keys in `erlang:memory/0`
   * `[vm, total_run_queue_lengths]` - returns the run queue lengths for CPU and IO schedulers. It contains the `total`, `cpu` and `io` measurements
-  * `[vm, system_counts]` - returns the current process, atom and port count as well as their respective limits as per `erlang:system_info/1`
-  * `[vm, persistent_term]` - number of terms and memory byte size for `persistent_term`
+  * `[vm, system_counts]` - returns the current process, atom and port count as per `erlang:system_info/1`
 
 You can directly consume those events after adding `telemetry_poller` as a dependency.
 
@@ -115,7 +113,7 @@ Then fire up `iex -pa "_build/default/lib/*/ebin"`, then
 
 ## Copyright and License
 
-Copyright (c) 2025 Erlang Ecosystem Foundation.
+Copyright (c) 2019 Erlang Ecosystem Foundation and Erlang Solutions.
 
 telemetry_poller source code is released under Apache License, Version 2.0.
 

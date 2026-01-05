@@ -2,7 +2,7 @@ defmodule Swoosh.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/swoosh/swoosh"
-  @version "1.19.9"
+  @version "1.17.10"
 
   def project do
     [
@@ -70,10 +70,9 @@ defmodule Swoosh.Mixfile do
       {:mime, "~> 1.1 or ~> 2.0"},
       {:jason, "~> 1.0"},
       {:telemetry, "~> 0.4.2 or ~> 1.0"},
-      {:idna, "~> 6.0"},
       {:hackney, "~> 1.9", optional: true},
       {:finch, "~> 0.6", optional: true},
-      {:req, "~> 0.5.10 or ~> 0.6 or ~> 1.0", optional: true},
+      {:req, "~> 0.5 or ~> 1.0", optional: true},
       {:mail, "~> 0.2", optional: true},
       {:gen_smtp, "~> 0.13 or ~> 1.0", optional: true},
       {:mua, "~> 0.2.3", optional: true},
@@ -85,7 +84,7 @@ defmodule Swoosh.Mixfile do
       {:ex_aws, "~> 2.1", optional: true},
       {:bypass, "~> 2.1", only: :test},
       {:ex_doc, "~> 0.26", only: :docs, runtime: false},
-      {:tailwind, "~> 0.4.0", only: [:docs, :dev], runtime: false}
+      {:tailwind, "~> 0.2.4", only: [:docs, :dev], runtime: false}
     ]
   end
 

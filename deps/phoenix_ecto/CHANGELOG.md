@@ -1,26 +1,5 @@
 # Changelog
 
-## v4.7.0
-
-* Bug fixes
-  * Disable migration lock when checking for pending migrations to avoid slow downs
-
-## v4.6.6
-
-* Bug fixes
-  * Keep backwards compatibility on sandbox API
-
-## v4.6.5
-
-* Bug fixes
-  * Unallow existing allowances when attempting to allow a Plug to access a connection
-
-## v4.6.4
-
-* Enhancements
-  * Wrap raised Ecto exceptions so context is not lost
-  * Do not override changeset actions
-
 ## v4.6.3
 
 * Enhancements

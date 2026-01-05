@@ -253,8 +253,6 @@ defmodule Phoenix.HTML.Form do
       that the textarea is rendered with no spaces after its
       content
   """
-  def normalize_value(type, value)
-
   def normalize_value("datetime-local", %struct{} = value)
       when struct in [NaiveDateTime, DateTime] do
     <<date::10-binary, ?\s, hour_minute::5-binary, _rest::binary>> = struct.to_string(value)
@@ -289,7 +287,7 @@ defmodule Phoenix.HTML.Form do
       an atom, string or integer to be used as the option value
     * simple atom, string or integer - which will be used as both label and value
       for the generated select
-
+    
   ## Option groups
 
   If `options` is map or keyword list where the first element is a string,
@@ -320,12 +318,6 @@ defmodule Phoenix.HTML.Form do
       #=>   <option>France</option>
       #=> </optgroup>
 
-  Custom option tags:
-
-      options_for_select(["Admin": "admin", "User": "user"], nil, tag: "opt")
-      #=> <opt value="admin">Admin</opt>
-      #=> <opt value="user">User</opt>
-
   Horizontal separators can be added:
 
       options_for_select(["Admin", "User", :hr, "New"], nil)
@@ -342,22 +334,21 @@ defmodule Phoenix.HTML.Form do
 
 
   """
-  def options_for_select(options, selected_values, extra \\ []) do
+  def options_for_select(options, selected_values) do
     {:safe,
      escaped_options_for_select(
        options,
-       selected_values |> List.wrap() |> Enum.map(&html_escape/1),
-       extra
+       selected_values |> List.wrap() |> Enum.map(&html_escape/1)
      )}
   end
 
-  defp escaped_options_for_select(options, selected_values, extra) do
+  defp escaped_options_for_select(options, selected_values) do
     Enum.reduce(options, [], fn
       {:hr, nil}, acc ->
         [acc | hr_tag()]
 
       {option_key, option_value}, acc ->
-        [acc | option(option_key, option_value, extra, selected_values)]
+        [acc | option(option_key, option_value, [], selected_values)]
 
       options, acc when is_list(options) ->
         {option_key, options} =
@@ -380,20 +371,19 @@ defmodule Phoenix.HTML.Form do
               {value, options}
           end
 
-        [acc | option(option_key, option_value, extra ++ options, selected_values)]
+        [acc | option(option_key, option_value, options, selected_values)]
 
       :hr, acc ->
         [acc | hr_tag()]
 
       option, acc ->
-        [acc | option(option, option, extra, selected_values)]
+        [acc | option(option, option, [], selected_values)]
     end)
   end
 
-  defp option(group_label, group_values, extra, value)
-       when is_list(group_values) or
-              (is_map(group_values) and not is_map_key(group_values, :__struct__)) do
-    section_options = escaped_options_for_select(group_values, value, extra)
+  defp option(group_label, group_values, [], value)
+       when is_list(group_values) or is_map(group_values) do
+    section_options = escaped_options_for_select(group_values, value)
     option_tag("optgroup", [label: group_label], {:safe, section_options})
   end
 
@@ -401,8 +391,7 @@ defmodule Phoenix.HTML.Form do
     option_key = html_escape(option_key)
     option_value = html_escape(option_value)
     attrs = extra ++ [selected: option_value in value, value: option_value]
-    {tag, attrs} = Keyword.pop(attrs, :tag, "option")
-    option_tag(tag, attrs, option_key)
+    option_tag("option", attrs, option_key)
   end
 
   defp option_tag(name, attrs, {:safe, body}) when is_binary(name) and is_list(attrs) do

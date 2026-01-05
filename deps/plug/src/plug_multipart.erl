@@ -365,7 +365,7 @@ form_data(Headers) ->
         false -> <<"text/plain">>;
         {_, T} -> T
       end,
-      %% Turns out this is unnecessary per RFC7578 4.7.
+      %% @todo Turns out this is unnecessary per RFC7578 4.7.
       TransferEncoding = case lists:keyfind(
           <<"content-transfer-encoding">>, 1, Headers) of
         false -> <<"7bit">>;

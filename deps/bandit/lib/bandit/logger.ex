@@ -28,17 +28,8 @@ defmodule Bandit.Logger do
   end
 
   def logger_metadata_for(kind, reason, stacktrace, metadata) do
-    crash_reason = crash_reason(kind, reason, stacktrace)
-
-    case reason do
-      %Bandit.HTTP2.Errors.StreamError{stream_id: stream_id} when is_integer(stream_id) ->
-        [stream_id: stream_id, domain: [:bandit], crash_reason: crash_reason]
-        |> Keyword.merge(metadata)
-
-      _ ->
-        [domain: [:bandit], crash_reason: crash_reason]
-        |> Keyword.merge(metadata)
-    end
+    [domain: [:bandit], crash_reason: crash_reason(kind, reason, stacktrace)]
+    |> Keyword.merge(metadata)
   end
 
   defp crash_reason(:throw, reason, stacktrace), do: {{:nocatch, reason}, stacktrace}

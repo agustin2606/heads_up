@@ -1,16 +1,15 @@
 defmodule Plug.MixProject do
   use Mix.Project
 
-  @version "1.19.1"
+  @version "1.17.0"
   @description "Compose web applications with functions"
   @xref_exclude [Plug.Cowboy, :ssl]
-  @source_url "https://github.com/elixir-plug/plug"
 
   def project do
     [
       app: :plug,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.10",
       deps: deps(),
       package: package(),
       description: @description,
@@ -19,7 +18,6 @@ defmodule Plug.MixProject do
       consolidate_protocols: Mix.env() != :test,
       docs: [
         extras: [
-          "CHANGELOG.md",
           "README.md",
           "guides/https.md"
         ],
@@ -27,7 +25,7 @@ defmodule Plug.MixProject do
         groups_for_modules: groups_for_modules(),
         groups_for_extras: groups_for_extras(),
         source_ref: "v#{@version}",
-        source_url: @source_url
+        source_url: "https://github.com/elixir-plug/plug"
       ],
       test_ignore_filters: [&String.starts_with?(&1, "test/fixtures/")]
     ]
@@ -64,10 +62,7 @@ defmodule Plug.MixProject do
     %{
       licenses: ["Apache-2.0"],
       maintainers: ["Gary Rennie", "José Valim"],
-      links: %{
-        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md",
-        "GitHub" => @source_url
-      },
+      links: %{"GitHub" => "https://github.com/elixir-plug/plug"},
       files: ["lib", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE", "src", ".formatter.exs"]
     }
   end

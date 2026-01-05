@@ -3,7 +3,7 @@ defmodule Ecto.SubQuery do
   A struct representing subqueries.
 
   Users of Ecto must consider this struct as opaque
-  and not access its fields. Authors of adapters may
+  and not access its field. Authors of adapters may
   read its contents, but never modify them.
 
   See `Ecto.Query.subquery/2` for more information.
@@ -507,7 +507,7 @@ defmodule Ecto.Query do
       MapSet.to_list(fields)
     end
 
-    defp types!(fields, types) when is_map(types) do
+    defp types!(fields, types) do
       Enum.map(fields, fn field ->
         case types do
           %{^field => type} ->
@@ -517,18 +517,6 @@ defmodule Ecto.Query do
             raise ArgumentError,
                   "values/2 must declare the type for every field. " <>
                     "The type was not given for field `#{field}`"
-        end
-      end)
-    end
-
-    defp types!(fields, schema) when is_atom(schema) do
-      Enum.map(fields, fn field ->
-        if type = schema.__schema__(:type, field) do
-          {field, type}
-        else
-          raise ArgumentError,
-                "values/2 must declare the type for every field. " <>
-                  "The type was not given for field `#{field}`"
         end
       end)
     end
@@ -593,7 +581,7 @@ defmodule Ecto.Query do
 
   ## `where`, `having` and a `join`'s `on`
 
-  The [`dynamic`](`dynamic/2`) macro can be interpolated at the root of a `where`,
+  The `dynamic` macro can be interpolated at the root of a `where`,
   `having` or a `join`'s `on`.
 
   For example, assuming the `conditions` variable defined in the
@@ -935,7 +923,7 @@ defmodule Ecto.Query do
   end
 
   @doc """
-  Resets a previously set field or fields on a query.
+  Resets a previously set field on a query.
 
   It can reset many fields except the query source (`from`). When excluding
   a `:join`, it will remove *all* types of joins. If you prefer to remove a
@@ -957,14 +945,9 @@ defmodule Ecto.Query do
       Ecto.Query.exclude(query, :lock)
       Ecto.Query.exclude(query, :preload)
       Ecto.Query.exclude(query, :update)
-      Ecto.Query.exclude(query, :windows)
 
-  You can remove multiple things at once by passing a list
-
-      Ecto.Query.exclude(query, [:join, :where])
-      Ecto.Query.exclude(query, [:limit, :offset])
-
-  You can remove specific joins such as `left_join` and `inner_join`:
+  You can also remove specific joins as well such as `left_join` and
+  `inner_join`:
 
       Ecto.Query.exclude(query, :inner_join)
       Ecto.Query.exclude(query, :cross_join)
@@ -978,24 +961,9 @@ defmodule Ecto.Query do
   However, keep in mind that if a join is removed and its bindings
   were referenced elsewhere, the bindings won't be removed, leading
   to a query that won't compile.
-
-  You can remove specific windows by name:
-
-    Ecto.Query.exclude(query, {:windows, [name1, name2]})
-
-  If a window was referenced elsewhere, for example in `select` or `order_by`,
-  it won't be removed. You must recreate the expressions manually.
   """
-  def exclude(%Ecto.Query{} = query, field), do: maybe_exclude_list(query, field)
-  def exclude(query, field), do: maybe_exclude_list(Ecto.Queryable.to_query(query), field)
-
-  defp maybe_exclude_list(query, list) when is_list(list) do
-    Enum.reduce(list, query, &do_exclude(&2, &1))
-  end
-
-  defp maybe_exclude_list(query, field) do
-    do_exclude(query, field)
-  end
+  def exclude(%Ecto.Query{} = query, field), do: do_exclude(query, field)
+  def exclude(query, field), do: do_exclude(Ecto.Queryable.to_query(query), field)
 
   defp do_exclude(%Ecto.Query{} = query, :join) do
     %{query | joins: [], aliases: Map.take(query.aliases, [query.from.as])}
@@ -1006,11 +974,6 @@ defmodule Ecto.Query do
     {excluded, remaining} = Enum.split_with(query.joins, &(&1.qual == qual))
     aliases = Map.drop(query.aliases, Enum.map(excluded, & &1.as))
     %{query | joins: remaining, aliases: aliases}
-  end
-
-  defp do_exclude(%Ecto.Query{} = query, {:windows, window_names}) when is_list(window_names) do
-    remaining = Enum.filter(query.windows, fn {name, _} -> name not in window_names end)
-    %{query | windows: remaining}
   end
 
   defp do_exclude(%Ecto.Query{} = query, :where), do: %{query | wheres: []}
@@ -1026,7 +989,6 @@ defmodule Ecto.Query do
   defp do_exclude(%Ecto.Query{} = query, :lock), do: %{query | lock: nil}
   defp do_exclude(%Ecto.Query{} = query, :preload), do: %{query | preloads: [], assocs: []}
   defp do_exclude(%Ecto.Query{} = query, :update), do: %{query | updates: []}
-  defp do_exclude(%Ecto.Query{} = query, :windows), do: %{query | windows: []}
 
   @doc """
   Creates a query.
@@ -1102,7 +1064,7 @@ defmodule Ecto.Query do
       {"cities", Source} |> select([c], c)
 
       # Ecto.Query
-      from(c in City) |> select([c], c)
+      from(c in Cities) |> select([c], c)
 
   ## Examples
 
@@ -1553,10 +1515,10 @@ defmodule Ecto.Query do
       |> with_cte("category_tree", as: fragment(@raw_sql_category_tree))
       |> join(:inner, [p], c in "category_tree", on: c.id == p.category_id)
 
-  You can also query over the CTE table itself. In such cases, you can pass an
-  `m:Ecto.Queryable#module-tuple` module tuple with the CTE table name as the first element
-  and an Ecto schema as the second element. This will cast the result rows to Ecto
-  structs, as long as the Ecto schema maps over the same fields in the CTE table:
+  You can also query over the CTE table itself. In such cases, you can pass
+  tuple with the CTE table name as the first element and an Ecto schema as the second
+  element. This will cast the result rows to Ecto structs as long as the Ecto
+  schema maps over the same fields in the CTE table:
 
       {"category_tree", Category}
       |> recursive_ctes(true)
@@ -1565,28 +1527,15 @@ defmodule Ecto.Query do
       |> group_by([c], c.id)
       |> select([c, p], %{c | products_count: count(p.id)})
 
-  Keep in mind that this will override the source table name to `"category_tree"` in the
-  resulting structs, which will also inherit all other properties from the `Category` schema,
-  including a `@schema_prefix` if any is set.
-
-  In such cases, you can disable those properties by setting them as options:
+  Keep in mind that the query above will inherit all properties from the `Category` schema,
+  include a `@schema_prefix` if any is set. In such cases, you can disable those properties
+  by setting them as option:
 
       from(cte in {"category_tree", Category}, prefix: nil)
       |> recursive_ctes(true)
       |> with_cte("category_tree", as: ^category_tree_query)
 
-  or join the CTE's result to the original schema:
-
-      Category
-      |> recursive_ctes(true)
-      |> with_cte("category_tree", as: ^category_tree_query)
-      |> join(:inner, [c], tree in "category_tree", on: c.id == tree.id)
-
-  While this requires an additional join, it will allow you to use the structs in further
-  data-modifying operations throughout your application without the need to manually reset
-  the source table name.
-
-  For the Postgres built-in adapter, it is possible to define data-modifying CTE queries:
+  For Postgres built-in adapter, it is possible to define data-modifying CTE queries:
 
       update_categories_query =
         Category
@@ -1600,7 +1549,7 @@ defmodule Ecto.Query do
 
   Note: In order to retrieve the updates rows from a CTE query, the parent query
   must select rows from the CTE table instead of the table referenced by the CTE query.
-  For example, `"update_categories"` will return updated rows for `"category"` table, but
+  For example, `"update_categories"` will return updates rows for `"category"` table, but
   selecting from `"category"` table directly will return unaffected rows.
   For more details see Postgres documentation on data-modifying CTEs and how these work
   with snapshots.
@@ -1993,7 +1942,7 @@ defmodule Ecto.Query do
   works with the macro-based query syntax and not the keyword-based
   query syntax.
 
-  For example, the following will generate a query that orders by `human_population`
+  For example, the following will generate a query that orders by `human_popluation`
   and then `name`:
 
       City |> order_by([c], c.name) |> prepend_order_by([c], c.human_population)
@@ -2870,7 +2819,7 @@ defmodule Ecto.Query do
 
   ## Dynamic preloads
 
-  Preloads can also be specified dynamically using the [`dynamic`](`dynamic/2`) macro:
+  Preloads can also be specified dynamically using the `dynamic` macro:
 
         preloads = [comments: dynamic([comments: c], c)]
 

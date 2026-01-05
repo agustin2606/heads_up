@@ -5,7 +5,7 @@ defmodule Phoenix.LiveView.Router do
 
   @cookie_key "__phoenix_flash__"
 
-  @doc ~S"""
+  @doc """
   Defines a LiveView route.
 
   A LiveView can be routed to by using the `live` macro with a path and
@@ -13,10 +13,9 @@ defmodule Phoenix.LiveView.Router do
 
       live "/thermostat", ThermostatLive
 
-  To navigate to this route within your app, you can use `Phoenix.VerifiedRoutes`:
+  By default, you can generate a route to this LiveView by using the `live_path` helper:
 
-      push_navigate(socket, to: ~p"/thermostat")
-      push_patch(socket, to: ~p"/thermostat?page=#{page}")
+      live_path(@socket, ThermostatLive)
 
   > #### HTTP requests {: .info}
   >
@@ -42,6 +41,14 @@ defmodule Phoenix.LiveView.Router do
       live "/articles", ArticleLive.Index, :index
       live "/articles/new", ArticleLive.Index, :new
       live "/articles/:id/edit", ArticleLive.Index, :edit
+
+  When an action is given, the generated route helpers are named after
+  the LiveView itself (in the same way as for a controller). For the example
+  above, we will have:
+
+      article_index_path(@socket, :index)
+      article_index_path(@socket, :new)
+      article_index_path(@socket, :edit, 123)
 
   The current action will always be available inside the LiveView as
   the `@live_action` assign, that can be used to render a LiveComponent:
@@ -197,22 +204,27 @@ defmodule Phoenix.LiveView.Router do
 
   If you have both regular HTTP routes (via get, post, etc) and `live` routes, then
   you need to perform the same authentication and authorization rules in both.
-  For example, if you were to add a `get "/admin/health"` route, then you must create
-  your own plug that performs the same authentication and authorization rules as
-  `MyAppWeb.AdminLiveAuth`, and then pipe through it:
+  For example, if you were to add a `get "/admin/health"` entry point inside the
+  `:admin` live session above, then you must create your own plug that performs the
+  same authentication and authorization rules as `MyAppWeb.AdminLiveAuth`, and then
+  pipe through it:
 
-      scope "/" do
-        # Regular routes
-        pipe_through [MyAppWeb.AdminPlugAuth]
-        get "/admin/health", AdminHealthController, :index
+      live_session :admin, on_mount: MyAppWeb.AdminLiveAuth do
+        scope "/" do
+          # Regular routes
+          pipe_through [MyAppWeb.AdminPlugAuth]
+          get "/admin/health", AdminHealthController, :index
 
-        # Live routes
-        live_session :admin, on_mount: MyAppWeb.AdminLiveAuth do
+          # Live routes
           live "/admin", AdminDashboardLive, :index
           live "/admin/posts", AdminPostLive, :index
         end
       end
 
+  The opposite is also true, if you have regular http routes and you want to
+  add your own `live` routes, the same authentication and authorization checks
+  executed by the plugs listed in `pipe_through` must be ported to LiveViews
+  and be executed via `on_mount` hooks.
   """
   defmacro live_session(name, opts \\ [], do: block) do
     opts = Macro.expand_literals(opts, %{__CALLER__ | function: {:live_session, 3}})
@@ -227,6 +239,7 @@ defmodule Phoenix.LiveView.Router do
   @doc false
   def __live_session__(module, opts, name) do
     Module.register_attribute(module, :phoenix_live_sessions, accumulate: true)
+    vsn = session_vsn(module)
 
     if not is_atom(name) do
       raise ArgumentError, """
@@ -250,7 +263,7 @@ defmodule Phoenix.LiveView.Router do
       """
     end
 
-    current = %{name: name, extra: extra}
+    current = %{name: name, extra: extra, vsn: vsn}
     Module.put_attribute(module, :phoenix_live_session_current, current)
 
     Module.put_attribute(module, :phoenix_live_sessions, name)
@@ -361,7 +374,7 @@ defmodule Phoenix.LiveView.Router do
       when is_atom(action) and is_list(opts) do
     live_session =
       Module.get_attribute(router, :phoenix_live_session_current) ||
-        %{name: :default, extra: %{}}
+        %{name: :default, extra: %{}, vsn: session_vsn(router)}
 
     helpers = Module.get_attribute(router, :phoenix_helpers)
 
@@ -474,4 +487,14 @@ defmodule Phoenix.LiveView.Router do
   end
 
   defp cookie_flash(%Plug.Conn{} = conn), do: {conn, nil}
+
+  defp session_vsn(module) do
+    if vsn = Module.get_attribute(module, :phoenix_session_vsn) do
+      vsn
+    else
+      vsn = System.system_time()
+      Module.put_attribute(module, :phoenix_session_vsn, vsn)
+      vsn
+    end
+  end
 end

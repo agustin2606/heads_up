@@ -14,7 +14,7 @@ defmodule Bandit.HTTP2.Handler do
     connection = Bandit.HTTP2.Connection.init(socket, state.plug, state.opts)
     {:continue, Map.merge(state, %{buffer: <<>>, connection: connection})}
   rescue
-    error -> rescue_connection_error(error, __STACKTRACE__, socket, state)
+    error -> rescue_error(error, __STACKTRACE__, socket, state)
   end
 
   @impl ThousandIsland.Handler
@@ -38,8 +38,7 @@ defmodule Bandit.HTTP2.Handler do
     end)
     |> then(&{:continue, &1})
   rescue
-    error in Bandit.HTTP2.Errors.StreamError -> rescue_stream_error(error, socket, state)
-    error -> rescue_connection_error(error, __STACKTRACE__, socket, state)
+    error -> rescue_error(error, __STACKTRACE__, socket, state)
   end
 
   @impl ThousandIsland.Handler
@@ -60,18 +59,6 @@ defmodule Bandit.HTTP2.Handler do
       socket,
       state.connection
     )
-  end
-
-  def handle_call({:peer_data, _stream_id}, _from, {socket, state}) do
-    {:reply, Bandit.SocketHelpers.peer_data(socket), {socket, state}, socket.read_timeout}
-  end
-
-  def handle_call({:sock_data, _stream_id}, _from, {socket, state}) do
-    {:reply, Bandit.SocketHelpers.sock_data(socket), {socket, state}, socket.read_timeout}
-  end
-
-  def handle_call({:ssl_data, _stream_id}, _from, {socket, state}) do
-    {:reply, Bandit.SocketHelpers.ssl_data(socket), {socket, state}, socket.read_timeout}
   end
 
   def handle_call({{:send_data, data, end_stream}, stream_id}, from, {socket, state}) do
@@ -149,18 +136,7 @@ defmodule Bandit.HTTP2.Handler do
     {:noreply, {socket, %{state | connection: connection}}, socket.read_timeout}
   end
 
-  defp rescue_stream_error(error, socket, state) do
-    Bandit.HTTP2.Connection.send_rst_stream(
-      error.stream_id,
-      error.error_code,
-      socket,
-      state.connection
-    )
-
-    {:continue, state}
-  end
-
-  defp rescue_connection_error(error, stacktrace, socket, state) do
+  defp rescue_error(error, stacktrace, socket, state) do
     do_rescue_error(error, stacktrace, socket, state)
     {:close, state}
   end
@@ -172,12 +148,12 @@ defmodule Bandit.HTTP2.Handler do
 
   defp do_rescue_error(error, stacktrace, socket, state) do
     _ =
-      if state[:connection] do
+      if state.connection do
         Bandit.HTTP2.Connection.close_connection(
           error.error_code,
           error.message,
           socket,
-          state[:connection]
+          state.connection
         )
       end
 

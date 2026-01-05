@@ -328,8 +328,8 @@ defmodule Phoenix.Component do
 
       def unordered_list(assigns) do
         ~H"""
-        <ul>
-          <li :for={entry <- @entries}>{render_slot(@inner_block, entry)}</li>
+        <ul :for={entry <- @entries}>
+          <li>{render_slot(@inner_block, entry)}</li>
         </ul>
         """
       end
@@ -505,12 +505,11 @@ defmodule Phoenix.Component do
   See `embed_templates/1` for more information, including declarative
   assigns support for embedded templates.
 
-  ## Debug information
+  ## Debug Annotations
 
-  HEEx templates support adding annotations and locations to the rendered
-  page, which are special HTML comments and attributes that help you identify
-  where markup in your HTML document is rendered within your function component
-  tree.
+  HEEx templates support debug annotations, which are special HTML comments
+  that wrap around rendered components to help you identify where markup
+  in your HTML document is rendered within your function component tree.
 
   For example, imagine the following HEEx template:
 
@@ -520,8 +519,8 @@ defmodule Phoenix.Component do
   </.header>
   ```
 
-  By turning on `debug_heex_annotations`, the HTML document would receive the
-  following comments when debug annotations are enabled:
+  The HTML document would receive the following comments when debug annotations
+  are enabled:
 
   ```html
   <!-- @caller lib/app_web/home_live.ex:20 -->
@@ -535,22 +534,11 @@ defmodule Phoenix.Component do
   <!-- </AppWeb.CoreComponents.header> -->
   ```
 
-  Similarly, you can also turn on `:debug_attributes`, which adds a
-  `data-phx-loc` attribute with the line of where each HTML tag is defined
-  (as well as `data-phx-pid` to the LiveView container):
+  Debug annotations work across any `~H` or `.html.heex` template.
+  They can be enabled globally with the following configuration in your
+  `config/dev.exs` file:
 
-  ```html
-  <header data-phx-loc="125" class="p-5">
-    <button data-phx-loc="458" class="px-2 bg-indigo-500 text-white">Click</button>
-  </header>
-  ```
-
-  These features work on any `~H` or `.html.heex` template. They can be enabled
-  globally with the following configuration in your `config/dev.exs` file:
-
-      config :phoenix_live_view,
-        debug_heex_annotations: true,
-        debug_attributes: true
+      config :phoenix_live_view, debug_heex_annotations: true
 
   Changing this configuration will require `mix clean` and a full recompile.
 
@@ -706,8 +694,7 @@ defmodule Phoenix.Component do
     allows for rendering optimizations.
 
   * `list` (only for the `class` attribute) - each element of the list is processed
-    as a different class. `nil` and `false` elements are discarded. Nested lists
-    are supported and flattened.
+    as a different class. `nil` and `false` elements are discarded.
 
   For multiple dynamic attributes, you can use the same notation but without
   assigning the expression to any specific attribute:
@@ -720,7 +707,6 @@ defmodule Phoenix.Component do
 
   In this case, the expression inside `{...}` must be either a keyword list or
   a map containing the key-value pairs representing the dynamic attributes.
-  If using a map, ensure your keys are atoms.
 
   ### Interpolating blocks
 
@@ -772,7 +758,7 @@ defmodule Phoenix.Component do
   caller. For an example, see how `form/1` works:
 
   ```heex
-  <.form :let={f} for={@form} id="my-form" phx-change="validate" phx-submit="save">
+  <.form :let={f} for={@form} phx-change="validate" phx-submit="save">
     <.input field={f[:username]} type="text" />
     ...
   </.form>
@@ -821,7 +807,7 @@ defmodule Phoenix.Component do
     <:col :for={header <- @headers} :let={user}>
       <td>{user[header]}</td>
     </:col>
-  <.table>
+  <table>
   ```
 
   You can also combine `:for` and `:if` for tags, components, and slot to act as a filter:
@@ -832,35 +818,6 @@ defmodule Phoenix.Component do
 
   Note that unlike Elixir's regular `for`, HEEx' `:for` does not support multiple
   generators in one expression. In such cases, you must use `EEx`'s blocks.
-
-  > #### Change tracking `:for` on slots {: .warning}
-  >
-  > Compared to regular HTML tags and components, LiveView does not
-  > optimize comprehensions on slots.
-  > This means that if `@headers` changes in the example above, all
-  > headers are sent over the wire again.
-  >
-  > Furthermore, `:key` (see below) is also not supported on slots
-  > right now.
-
-  #### `:key`ed comprehensions
-
-  When using `:for`, you can optionally provide a `:key` expression to perform
-  better change tracking inside the comprehension:
-
-  ```heex
-  <ul>
-    <li :for={%{id: id, name: name} <- @items} :key={id}>
-      Count: <span>{@count}</span>,
-      item: {name}
-    </li>
-  </ul>
-  ```
-
-  By default, the index is used as a key, which means that appending an entry leads to
-  all items being considered changed. Therefore, we recommend to use a `:key` whenever possible.
-
-  Note that the `:key` has no effect when using [streams](`Phoenix.LiveView.stream/4`).
 
   ### Function components
 
@@ -988,9 +945,6 @@ defmodule Phoenix.Component do
 
   * When rendering a LiveView inside a regular (non-live) controller/view.
 
-  Most other cases for shared functionality, including state management and user interactions, can be
-  [achieved with function components or LiveComponents](welcome.html#compartmentalize-state-markup-and-events-in-liveview)
-
   ## Options
 
   * `:session` - a map of binary keys with extra session data to be serialized and sent
@@ -1011,9 +965,8 @@ defmodule Phoenix.Component do
   * `:sticky` - an optional flag to maintain the LiveView across live redirects, even if it is
   nested within another LiveView. Note that this only works for LiveViews that are in the same
   [live_session](`Phoenix.LiveView.Router.live_session/3`).
-  If you are rendering the sticky view within another LiveView, make sure that the sticky view
-  itself does not use the same layout. You can do so by returning `{:ok, socket, layout: false}`
-  from mount.
+  If you are rendering the sticky view within make sure that the sticky view itself does not use
+  the same layout. You can do so by returning `{:ok, socket, layout: false}` from mount.
 
   ## Examples
 
@@ -1057,11 +1010,6 @@ defmodule Phoenix.Component do
   Beware if you set this to `:body`, as any content injected inside the body
   (such as `Phoenix.LiveReload` features) will be discarded once the LiveView
   connects
-
-  ## Testing
-
-  Note that `render_click/1` and other testing functions will send events to the root LiveView, and you will want to
-  `find_live_child/2` to interact with nested LiveViews in your live tests.
   """
   def live_render(conn_or_socket, view, opts \\ [])
 
@@ -1151,10 +1099,7 @@ defmodule Phoenix.Component do
   end
 
   def __render_slot__(changed, entry, argument) when is_map(entry) do
-    case entry.inner_block do
-      %Phoenix.LiveView.Rendered{} = rendered -> rendered
-      fun -> fun.(changed, argument)
-    end
+    entry.inner_block.(changed, argument)
   end
 
   defp call_inner_block!(entry, changed, argument) do
@@ -1163,10 +1108,7 @@ defmodule Phoenix.Component do
       raise RuntimeError, message
     end
 
-    case entry.inner_block do
-      %Phoenix.LiveView.Rendered{} = rendered -> rendered
-      fun -> fun.(changed, argument)
-    end
+    entry.inner_block.(changed, argument)
   end
 
   @doc """
@@ -1316,8 +1258,8 @@ defmodule Phoenix.Component do
   ### When connected
 
   LiveView is also able to share assigns via `assign_new` with children LiveViews,
-  as long as the child LiveView is also mounted when the parent LiveView is mounted
-  and the child LiveView is not rendered with `sticky: true`. Let's see an example.
+  as long as the child LiveView is also mounted when the parent LiveView is mounted.
+  Let's see an example.
 
   If the parent LiveView defines a `:current_user` assign and the child LiveView also
   uses `assign_new/3` to fetch the `:current_user` in its `mount/3` callback, as in
@@ -1433,15 +1375,12 @@ defmodule Phoenix.Component do
 
   The first argument is either a LiveView `socket` or an `assigns` map from function components.
 
-  When a keyword list or map is provided as the second argument, it will be merged into the existing assigns.
-  If a function is given, it takes the current assigns as an argument and its return
-  value will be merged into the current assigns.
+  A keyword list or a map of assigns must be given as argument to be merged into existing assigns.
 
   ## Examples
 
       iex> assign(socket, name: "Elixir", logo: "💧")
       iex> assign(socket, %{name: "Elixir"})
-      iex> assign(socket, fn %{name: name, logo: logo} -> %{title: Enum.join([name, logo], " | ")} end)
 
   """
   def assign(socket_or_assigns, keyword_or_map)
@@ -1449,16 +1388,6 @@ defmodule Phoenix.Component do
     Enum.reduce(keyword_or_map, socket_or_assigns, fn {key, value}, acc ->
       assign(acc, key, value)
     end)
-  end
-
-  def assign(socket_or_assigns, fun) when is_function(fun, 1) do
-    assigns =
-      case socket_or_assigns do
-        %Socket{assigns: assigns} -> assigns
-        assigns -> assigns
-      end
-
-    assign(socket_or_assigns, fun.(assigns))
   end
 
   defp validate_assign_key!(:flash) do
@@ -1758,17 +1687,10 @@ defmodule Phoenix.Component do
     unused_field_str = "_unused_#{field}"
 
     case params do
-      %{^field_str => _, ^unused_field_str => _} ->
-        false
-
-      %{^field_str => %{} = nested} when not is_struct(nested) ->
-        Enum.any?(Map.keys(nested), &used_param?(nested, &1))
-
-      %{^field_str => _val} ->
-        true
-
-      %{} ->
-        false
+      %{^field_str => _, ^unused_field_str => _} -> false
+      %{^field_str => %{} = nested} -> Enum.any?(Map.keys(nested), &used_param?(nested, &1))
+      %{^field_str => _val} -> true
+      %{} -> false
     end
   end
 
@@ -2246,7 +2168,7 @@ defmodule Phoenix.Component do
     default: nil,
     doc:
       "The default title to use if the inner block is empty on regular or connected mounts." <>
-        " *Note*: empty titles, such as `nil` or an empty string, fall back to the default value."
+        "*Note*: empty titles, such as `nil` or an empty string, fallsback to the default value."
   )
 
   attr.(:suffix, :string, default: nil, doc: "A suffix added after the content of `inner_block`.")
@@ -2298,7 +2220,6 @@ defmodule Phoenix.Component do
   ```heex
   <.form
     for={@form}
-    id="my-form"
     phx-change="change_name"
   >
     <.input field={@form[:email]} />
@@ -2322,10 +2243,9 @@ defmodule Phoenix.Component do
   ```heex
   <.form
     for={@form}
-    id="my-form"
+    multipart
     phx-change="change_user"
     phx-submit="save_user"
-    multipart
   >
     ...
     <input type="submit" value="Save" />
@@ -2348,7 +2268,6 @@ defmodule Phoenix.Component do
   <.form
     :let={form}
     for={@changeset}
-    id="my-form"
     phx-change="change_user"
   >
   ```
@@ -2573,7 +2492,6 @@ defmodule Phoenix.Component do
   ```heex
   <.form
     for={@form}
-    id="my-form"
     phx-change="change_name"
   >
     <.inputs_for :let={f_nested} field={@form[:nested]}>
@@ -2792,14 +2710,6 @@ defmodule Phoenix.Component do
     """
   )
 
-  attr.(:skip_persistent_id, :boolean,
-    default: false,
-    doc: """
-    Skip the automatic rendering of hidden _persistent_id fields used for reordering
-    inputs.
-    """
-  )
-
   attr.(:options, :list,
     default: [],
     doc: """
@@ -2822,42 +2732,11 @@ defmodule Phoenix.Component do
       |> Keyword.merge(assigns.options)
 
     forms = parent_form.impl.to_form(parent_form.source, parent_form, field_name, options)
-
-    forms =
-      case assigns do
-        %{skip_persistent_id: true} ->
-          forms
-
-        _ ->
-          apply_persistent_id(
-            parent_form,
-            forms,
-            field_name,
-            options
-          )
-      end
-
-    assigns = assign(assigns, :forms, forms)
-
-    ~H"""
-    <%= for finner <- @forms do %>
-      <%= if !@skip_hidden do %>
-        <%= for {name, value_or_values} <- finner.hidden,
-                name = name_for_value_or_values(finner, name, value_or_values),
-                value <- List.wrap(value_or_values) do %>
-          <input type="hidden" name={name} value={value} />
-        <% end %>
-      <% end %>
-      {render_slot(@inner_block, finner)}
-    <% end %>
-    """
-  end
-
-  defp apply_persistent_id(parent_form, forms, field_name, options) do
     seen_ids = for f <- forms, vid = f.params[@persistent_id], into: %{}, do: {vid, true}
+    acc = {seen_ids, 0}
 
     {forms, _} =
-      Enum.map_reduce(forms, {seen_ids, 0}, fn
+      Enum.map_reduce(forms, acc, fn
         %Phoenix.HTML.Form{params: params} = form, {seen_ids, index} ->
           id =
             case params do
@@ -2886,7 +2765,20 @@ defmodule Phoenix.Component do
           {new_form, {Map.put(seen_ids, id, true), index + 1}}
       end)
 
-    forms
+    assigns = assign(assigns, :forms, forms)
+
+    ~H"""
+    <%= for finner <- @forms do %>
+      <%= if !@skip_hidden do %>
+        <%= for {name, value_or_values} <- finner.hidden,
+                name = name_for_value_or_values(finner, name, value_or_values),
+                value <- List.wrap(value_or_values) do %>
+          <input type="hidden" name={name} value={value} />
+        <% end %>
+      <% end %>
+      {render_slot(@inner_block, finner)}
+    <% end %>
+    """
   end
 
   defp next_id(idx, %{} = seen_ids) do
@@ -3179,9 +3071,9 @@ defmodule Phoenix.Component do
   def focus_wrap(assigns) do
     ~H"""
     <div id={@id} phx-hook="Phoenix.FocusWrap" {@rest}>
-      <div id={"#{@id}-start"} tabindex="0" aria-hidden="true"></div>
+      <span id={"#{@id}-start"} tabindex="0" aria-hidden="true"></span>
       {render_slot(@inner_block)}
-      <div id={"#{@id}-end"} tabindex="0" aria-hidden="true"></div>
+      <span id={"#{@id}-end"} tabindex="0" aria-hidden="true"></span>
     </div>
     """
   end
@@ -3285,16 +3177,8 @@ defmodule Phoenix.Component do
 
   [INSERT LVATTRDOCS]
 
-  ## Customizing the Label
-
-  The `id` attribute cannot be overwritten, but you can create a label with a `for` attribute
-  pointing to the UploadConfig `ref`:
-
-  ```heex
-  <label for={@uploads.avatar.ref}>
-    <.live_file_input upload={@uploads.avatar} />
-  </label>
-  ```
+  Note the `id` attribute cannot be overwritten, but you can create a label with a `for` attribute
+  pointing to the UploadConfig `ref`.
 
   ## Drag and Drop
 
@@ -3303,12 +3187,12 @@ defmodule Phoenix.Component do
   for drag and drop support:
 
   ```heex
-  <label for={@uploads.avatar.ref} phx-drop-target={@uploads.avatar.ref}>
+  <div class="container" phx-drop-target={@uploads.avatar.ref}>
+    <!-- ... -->
     <.live_file_input upload={@uploads.avatar} />
-  </label>
+  </div>
   ```
 
-  The drop target receives the `phx-drop-target-active` class when it is active. For more information, see the [uploads guide](guides/server/uploads.md).
   ## Examples
 
   Rendering a file input:
@@ -3453,26 +3337,15 @@ defmodule Phoenix.Component do
   end
 
   @doc """
-  Renders a `Phoenix.LiveView.AsyncResult` struct (e.g. from `Phoenix.LiveView.assign_async/4`)
-  with slots for the different loading states.
+  Renders an async assign with slots for the different loading states.
   The result state takes precedence over subsequent loading and failed
   states.
 
-  > #### Note {: .info}
-  >
-  > The inner block receives the result of the async assign as a `:let`.
-  > The let is only accessible to the inner block and is not in scope to the
-  > other slots.
+  *Note*: The inner block receives the result of the async assign as a :let.
+  The let is only accessible to the inner block and is not in scope to the
+  other slots.
 
   ## Examples
-
-  ```elixir
-  def mount(%{"slug" => slug}, _, socket) do
-    {:ok,
-      socket
-      |> assign_async(:org, fn -> {:ok, %{org: fetch_org!(slug)}} end)}
-  end
-  ```
 
   ```heex
   <.async_result :let={org} assign={@org}>
@@ -3485,8 +3358,6 @@ defmodule Phoenix.Component do
     <% end %>
   </.async_result>
   ```
-
-  See [Async Operations](`m:Phoenix.LiveView#module-async-operations`) for more information.
 
   To display loading and failed states again on subsequent `assign_async` calls,
   reset the assign to a result-free `%AsyncResult{}`:
@@ -3523,77 +3394,5 @@ defmodule Phoenix.Component do
       async_assign.failed ->
         ~H|{render_slot(@failed, @assign.failed)}|
     end
-  end
-
-  @doc """
-  Renders a portal.
-
-  A portal is a component that teleports its content to another place in the DOM.
-  It is useful in cases where you need to render some content in another place, for
-  example due to overflow or [stacking context](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_positioned_layout/Stacking_context).
-
-  A portal consists of two parts:
-
-  1. The portal source: the component that should be teleported.
-  2. The portal target: the DOM element that will render the content of the portal source.
-
-  Any element can be a portal target. In most cases, the target would be rendered inside
-  the layout of your application. Portal sources must be defined with the `.portal` component.
-
-  > #### A note on testing {: .info}
-  >
-  > Because portals use `<template>` elements under the hood, you cannot query for elements
-  > inside of a portal when using `Phoenix.LiveViewTest.element/3` and other LiveViewTest functions.
-  >
-  > Instead, `Phoenix.LiveViewTest.render/1` the portal element itself to an HTML string and do
-  > assertions on those:
-  >
-  > ```heex
-  > <.portal id="my-portal" target="body">
-  >   <div id="something-inside">...</div>
-  > </.portal>
-  > ```
-  >
-  > ```elixir
-  > # in your test, instead of
-  > # assert has_element?(view, "#something-inside")  <-- this won't work
-  > html = view |> element("#my-portal") |> render()
-  > assert html =~ "something-inside"
-  > ```
-
-  ## Examples
-
-  ```heex
-  <.portal id="modal" target="body">
-    ...
-  </.portal>
-  ```
-  """
-
-  attr.(:id, :string, required: true)
-
-  attr.(:target, :string,
-    required: true,
-    doc: "A CSS selector that identifies the target. The target must be unique."
-  )
-
-  attr.(:class, :any, default: nil, doc: "The class to apply to the portal wrapper.")
-  attr.(:container, :string, default: "div", doc: "The HTML tag to use as the portal wrapper.")
-  slot.(:inner_block, required: true)
-
-  def portal(assigns) do
-    ~H"""
-    <template id={@id} data-phx-portal={@target}>
-      <%!--
-        For correct DOM patching, each portal source (template) must have a single root element,
-        which we enforce by wrapping the slot in a div. In the generated CSS for
-        new projects, we include a display: contents rule for data-phx-teleported-src,
-        which is set by the LiveView JS when an element is teleported.
-      --%>
-      <.dynamic_tag tag_name={@container} id={"_lv_portal_wrap_" <> @id} class={@class}>
-        {render_slot(@inner_block)}
-      </.dynamic_tag>
-    </template>
-    """
   end
 end

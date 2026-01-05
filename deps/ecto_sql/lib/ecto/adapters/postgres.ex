@@ -94,7 +94,7 @@ defmodule Ecto.Adapters.Postgres do
     * `:lc_collate` - the collation order
     * `:lc_ctype` - the character classification
     * `:dump_path` - where to place dumped structures
-    * `:dump_prefixes` - list of prefixes that will be included in the structure dump.
+    * `dump_prefixes` - list of prefixes that will be included in the structure dump.
       When specified, the prefixes will have their definitions dumped along with the
       data in their migration table. When it is not specified, the configured
       database has the definitions dumped from all of its schemas but only
@@ -120,36 +120,13 @@ defmodule Ecto.Adapters.Postgres do
   alongside Ecto, you must define a type module with your extensions.
   Create a new file anywhere in your application with the following:
 
-      Postgrex.Types.define(MyApp.PostgresTypes, [MyExtension.Foo, MyExtensionBar])
+      Postgrex.Types.define(MyApp.PostgresTypes,
+                            [MyExtension.Foo, MyExtensionBar] ++ Ecto.Adapters.Postgres.extensions())
 
   Once your type module is defined, you can configure the repository to use it:
 
       config :my_app, MyApp.Repo, types: MyApp.PostgresTypes
 
-  ## Unix socket connection
-
-  You may desire to communicate with Postgres via Unix sockets.
-  If your PG server is started on the same machine as your code, you could check that:
-
-  ```bash
-  % sudo grep unix_socket_directories /var/lib/postgres/data/postgresql.conf
-  unix_socket_directories = '/run/postgresql'
-  ```
-
-  ```bash
-  % ls -lah /run/postgresql
-  итого 4,0K
-  drwxr-xr-x  2 postgres postgres  80 июн  4 10:58 .
-  drwxr-xr-x 35 root     root     840 июн  4 21:02 ..
-  srwxrwxrwx  1 postgres postgres   0 июн  5 07:41 .s.PGSQL.5432
-  -rw-------  1 postgres postgres  61 июн  5 07:41 .s.PGSQL.5432.lock
-  ```
-
-  So you have postgresql started and listening on the socket.
-  Then you may use it as follows:
-
-      config :your_app, YourApp.Repo,
-        socket_dir: "/run/postgresql"
   """
 
   # Inherit all behaviour from Ecto.Adapters.SQL
@@ -166,13 +143,6 @@ defmodule Ecto.Adapters.Postgres do
 
   @doc """
   All Ecto extensions for Postgrex.
-
-  Currently Ecto does not define any of its own extensions for Postgrex.
-  If this changes in a future release, you will need to call this function
-  when defining your own custom extensions:
-
-      Postgrex.Types.define(MyApp.PostgresTypes,
-                            [MyExtension.Foo, MyExtensionBar] ++ Ecto.Adapters.Postgres.extensions())
   """
   def extensions do
     []

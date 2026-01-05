@@ -15,15 +15,12 @@ defmodule HeadsUpWeb.Router do
     plug :accepts, ["json"]
   end
 
-  pipeline :show do
-    plug :snoop
-  end
-
   def snoop(conn, _opts) do
     answer = ~w(Yes No Maybe) |> Enum.random()
+
     conn = assign(conn, :answer, answer)
 
-    IO.inspect(conn)
+    # IO.inspect(conn)
 
     conn
   end
@@ -31,21 +28,33 @@ defmodule HeadsUpWeb.Router do
   scope "/", HeadsUpWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    get "/welcome", PageController, :home
+    live "/", IncidentLive.Index
 
-    get "/tips", TipsController, :tips
-    get "/tips/:id", TipsController, :show
-
+    get "/tips", TipController, :index
+    get "/tips/:id", TipController, :show
     live "/effort", EffortLive
-
     live "/incidents", IncidentLive.Index
     live "/incidents/:id", IncidentLive.Show
+
+    live "/admin/incidents", AdminIncidentLive.Index
+    live "/admin/incidents/new", AdminIncidentLive.Form, :new
+    live "/admin/incidents/:id/edit", AdminIncidentLive.Form, :edit
+
+    live "/categories", CategoryLive.Index, :index
+    live "/categories/new", CategoryLive.Form, :new
+    live "/categories/:id", CategoryLive.Show, :show
+    live "/categories/:id/edit", CategoryLive.Form, :edit
   end
 
   # Other scopes may use custom stacks.
-  # scope "/api", HeadsUpWeb do
-  #   pipe_through :api
-  # end
+  scope "/api", HeadsUpWeb.Api do
+    pipe_through :api
+
+    get "/incidents", IncidentController, :index
+    get "/incidents/:id", IncidentController, :show
+    get "/categories/:id/incidents", CategoryController, :show
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:heads_up, :dev_routes) do

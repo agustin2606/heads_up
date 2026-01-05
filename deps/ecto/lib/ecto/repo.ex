@@ -30,8 +30,7 @@ defmodule Ecto.Repo do
   for more information. In spite of this, the following configuration values
   are common across all adapters:
 
-    * `:name`- The name of the Repo supervisor process. Notice that
-      it must be unique across **all repo modules**
+    * `:name`- The name of the Repo supervisor process
 
     * `:priv` - the directory where to keep repository data, like
       migrations, schema and more. Defaults to "priv/YOUR_REPO".
@@ -65,18 +64,8 @@ defmodule Ecto.Repo do
       use the `:repo` property in the event metadata for distinguishing
       between repos.
 
-    * `:stacktrace`- when `true`, publishes the stacktrace in telemetry events
+    * `:stacktrace`- when true, publishes the stacktrace in telemetry events
       and allows more advanced logging.
-
-    * `:log_stacktrace_mfa` - A `{module, function, arguments}` tuple that customizes
-      which part of the stacktrace is included in query logs. The specified function
-      must accept at least two arguments (stacktrace and metadata) and return
-      a filtered stacktrace. The metadata is a map with keys such as `:repo` and other
-      adapter specific information. Additional arguments can be passed in the third
-      element of the tuple. For `Ecto.Adapters.SQL`, defaults to
-      `{Ecto.Adapters.SQL, :first_non_ecto_stacktrace, [1]}`, which filters the
-      stacktrace to show only the first call originating from outside
-      Ecto's internal code. Only relevant when `:stacktrace` is `true`.
 
   ## URLs
 
@@ -97,31 +86,6 @@ defmodule Ecto.Repo do
 
       config :my_app, Repo,
         url: "ecto://postgres:postgres@localhost/ecto_simple?ssl=true&pool_size=10"
-
-  ### IPv6 support
-
-  If your database's host resolves to ipv6 address you should
-  add `socket_options: [:inet6]` to configuration block like below:
-
-      import Mix.Config
-
-      config :my_app, MyApp.Repo,
-        hostname: "db12.dc0.comp.any",
-        socket_options: [:inet6],
-        ...
-
-  ## `use` options
-
-  When you `use Ecto.Repo`, the following options are supported:
-
-    * `:otp_app` (required) - the name of the Erlang/OTP application
-      to find your repository configuration (usually your Elixir app name)
-
-    * `:adapter` (required) - the module of the database adapter you want to use
-
-    * `:read_only` - when true, marks the repository as `:read_only`.
-      In such cases, none of the functions that perform write operations, such as
-      `c:insert/2`, `c:insert_all/3`, `c:update_all/3`, and friends are defined
 
   ## Shared options
 
@@ -213,25 +177,17 @@ defmodule Ecto.Repo do
     * `:options` - extra options given to the repo operation under
       `:telemetry_options`
 
-  """
+  ## Read-only repositories
 
-  @moduledoc groups: [
-               %{title: "Query API", description: "Functions that operate on an `Ecto.Query`."},
-               %{
-                 title: "Schema API",
-                 description: "Functions that operate on an `Ecto.Schema` or a `Ecto.Changeset`."
-               },
-               %{
-                 title: "Transaction API",
-                 description: "Functions to work with database transactions and connections."
-               },
-               %{
-                 title: "Process API",
-                 description: "Functions to work with repository processes."
-               },
-               "Config API",
-               "User callbacks"
-             ]
+  You can mark a repository as read-only by passing the `:read_only`
+  flag on `use`:
+
+      use Ecto.Repo, otp_app: ..., adapter: ..., read_only: true
+
+  By passing the `:read_only` option, none of the functions that perform
+  write operations, such as `c:insert/2`, `c:insert_all/3`, `c:update_all/3`,
+  and friends will be defined.
+  """
 
   @type t :: module
 
@@ -242,7 +198,6 @@ defmodule Ecto.Repo do
   contains either atoms, for named Ecto repositories, or
   PIDs.
   """
-  @doc group: "Process API"
   @spec all_running() :: [atom() | pid()]
   defdelegate all_running(), to: Ecto.Repo.Registry
 
@@ -324,36 +279,15 @@ defmodule Ecto.Repo do
       ## Transactions
 
       if Ecto.Adapter.Transaction in behaviours do
-        def transact(fun_or_multi, opts \\ []) do
+        def transaction(fun_or_multi, opts \\ []) do
           repo = get_dynamic_repo()
 
-          {adapter_meta, opts} =
-            Ecto.Repo.Supervisor.tuplet(repo, prepare_opts(:transaction, opts))
-
-          {fun_or_multi, opts} = prepare_transaction(fun_or_multi, opts)
-
-          Ecto.Repo.Transaction.transact(
+          Ecto.Repo.Transaction.transaction(
             __MODULE__,
             repo,
             fun_or_multi,
-            {adapter_meta, opts}
+            Ecto.Repo.Supervisor.tuplet(repo, prepare_opts(:transaction, opts))
           )
-        end
-
-        def transaction(fun_or_multi, opts \\ [])
-
-        def transaction(fun, opts) when is_function(fun, 0) do
-          fun = fn -> {:ok, fun.()} end
-          transact(fun, opts)
-        end
-
-        def transaction(fun, opts) when is_function(fun, 1) do
-          fun = fn repo -> {:ok, fun.(repo)} end
-          transact(fun, opts)
-        end
-
-        def transaction(%Ecto.Multi{} = multi, opts) do
-          transact(multi, opts)
         end
 
         def in_transaction? do
@@ -502,17 +436,6 @@ defmodule Ecto.Repo do
           Ecto.Repo.Queryable.all(
             repo,
             queryable,
-            Ecto.Repo.Supervisor.tuplet(repo, prepare_opts(:all, opts))
-          )
-        end
-
-        def all_by(queryable, clauses, opts \\ []) do
-          repo = get_dynamic_repo()
-
-          Ecto.Repo.Queryable.all_by(
-            repo,
-            queryable,
-            clauses,
             Ecto.Repo.Supervisor.tuplet(repo, prepare_opts(:all, opts))
           )
         end
@@ -674,9 +597,6 @@ defmodule Ecto.Repo do
 
         def prepare_query(operation, query, opts), do: {query, opts}
         defoverridable prepare_query: 3
-
-        def prepare_transaction(fun_or_multi, opts), do: {fun_or_multi, opts}
-        defoverridable prepare_transaction: 2
       end
     end
   end
@@ -770,19 +690,19 @@ defmodule Ecto.Repo do
   Returns true if a connection has been checked out.
 
   This is true if inside a `c:Ecto.Repo.checkout/2` or
-  `c:Ecto.Repo.transact/2`.
+  `c:Ecto.Repo.transaction/2`.
 
   ## Examples
 
-      MyRepo.checked_out?()
+      MyRepo.checked_out?
       #=> false
 
-      MyRepo.transact(fn ->
-        MyRepo.checked_out?() #=> true
+      MyRepo.transaction(fn ->
+        MyRepo.checked_out? #=> true
       end)
 
       MyRepo.checkout(fn ->
-        MyRepo.checked_out?() #=> true
+        MyRepo.checked_out? #=> true
       end)
 
   """
@@ -874,21 +794,6 @@ defmodule Ecto.Repo do
 
   From this moment on, all future queries done by the current process will
   run on `:tenant_foo`.
-
-  > ### Global repo names {: .warning}
-  >
-  > The repo name resolution is global across all repo modules. When using
-  > `put_dynamic_repo/1`, ensure you're referencing the intended repo, as
-  > it is possible to accidentally reference repos from other modules:
-  >
-  > ```elixir
-  > Repo.start_link(name: :primary)
-  > AnalyticstRepo.start_link(name: :analytics)
-  >
-  > # This works but may not be intended - queries will use AnalyticsRepo's connection
-  > Repo.put_dynamic_repo(:analytics)
-  > Repo.all(User)  # Executes against AnalyticsRepo's connection!
-  > ```
   """
   @doc group: "Process API"
   @callback put_dynamic_repo(name_or_pid :: atom() | pid()) :: atom() | pid()
@@ -908,7 +813,6 @@ defmodule Ecto.Repo do
                       one!: 2,
                       preload: 3,
                       all: 2,
-                      all_by: 3,
                       stream: 2,
                       update_all: 3,
                       delete_all: 2
@@ -919,8 +823,6 @@ defmodule Ecto.Repo do
 
   Returns `nil` if no result was found. If the struct in the queryable
   has no or more than one primary key, it will raise an argument error.
-
-  See also `c:get!/3`, `c:one/2`, and `c:all_by/3`.
 
   ## Options
 
@@ -975,8 +877,6 @@ defmodule Ecto.Repo do
   Fetches a single result from the query.
 
   Returns `nil` if no result was found. Raises if more than one entry.
-
-  See also `c:get/3`, `c:one/2`, and `c:all_by/3`.
 
   ## Options
 
@@ -1042,8 +942,6 @@ defmodule Ecto.Repo do
   to the same schema. Ordering is guaranteed to be kept. Results not found in
   the database will be returned as `nil`.
 
-  Preloaded association will be discarded and need to be preloaded again.
-
   ## Example
 
       MyRepo.reload(post)
@@ -1081,15 +979,12 @@ defmodule Ecto.Repo do
   @doc """
   Calculate the given `aggregate`.
 
+  If the query has a limit, offset, distinct or combination set, it will be
+  automatically wrapped in a subquery in order to return the
+  proper result.
+
   Any preload or select in the query will be ignored in favor of
-  the column being aggregated. However, if the query has a limit,
-  offset, distinct or combination set, it will be automatically
-  wrapped in a subquery in order to return the proper result,
-  which requires the select field to follows certain rules:
-  it must return a `source`, a field (such as `source.field`),
-  or a map with atom keys and scalars (integers, floats, and
-  strings) or simple expressions as values. Those rules are shared
-  across all subqueries in Ecto.
+  the column being aggregated.
 
   The aggregation will fail if any `group_by` field is set.
 
@@ -1192,8 +1087,6 @@ defmodule Ecto.Repo do
   Fetches a single result from the query.
 
   Returns `nil` if no result was found. Raises if more than one entry.
-
-  See also `c:one!/2`, `c:get/3`, and `c:all/2`.
 
   ## Options
 
@@ -1300,10 +1193,7 @@ defmodule Ecto.Repo do
       query = from c in Comment, order_by: c.published_at
       posts = Repo.preload posts, [comments: {query, [:replies, :likes]}]
 
-      # Use a function for custom preloading
-      posts = Repo.preload posts, [comments: fn post_ids -> fetch_comments_by_post_ids(post_ids) end]
-
-  The query given to preload may also preload its own associations. See the ["preload queries"](Ecto.Query.html#preload/3-preload-queries) and ["preload functions"](Ecto.Query.html#preload/3-preload-functions) section of the `Ecto.Query.preload/3` for details on those.
+  The query given to preload may also preload its own associations.
   """
   @doc group: "Schema API"
   @callback preload(structs_or_struct_or_nil, preloads :: term, opts :: Keyword.t()) ::
@@ -1351,31 +1241,6 @@ defmodule Ecto.Repo do
             when operation: :all | :update_all | :delete_all | :stream | :insert_all
 
   @doc """
-  A user-customizable callback invoked on transaction operations.
-
-  This callback can be used to further modify the given Ecto Multi and options in a transaction operation
-  before it is transformed and sent to the database.
-
-  This callback is only invoked in transactions.
-
-  ## Examples
-
-  Imagine you want to prepend a SQL comment to commit statements using the `commit_comment` option on transactions.
-
-      @impl true
-      def prepare_transaction(multi_or_fun, opts) do
-        opts = Keyword.put_new_lazy(opts, :commit_comment, fn -> extract_comment(opts) end)
-        {multi_or_fun, opts}
-      end
-
-  The callback will be invoked for every transaction operation, and it will try to extract the appropriate commit comment,
-  that will be subsequently used by the adapters if they support this option.
-  """
-  @doc group: "User callbacks"
-  @callback prepare_transaction(fun_or_multi :: fun | Ecto.Multi.t(), opts :: Keyword.t()) ::
-              {fun_or_multi :: fun | Ecto.Multi.t(), Keyword.t()}
-
-  @doc """
   A user customizable callback invoked to retrieve default options
   for operations.
 
@@ -1409,8 +1274,6 @@ defmodule Ecto.Repo do
 
   May raise `Ecto.QueryError` if query validation fails.
 
-  See also `c:all_by/3`, `c:one/2`, and `c:get/3`.
-
   ## Options
 
     * `:prefix` - The prefix to run the query on (such as the schema path
@@ -1427,46 +1290,11 @@ defmodule Ecto.Repo do
 
       # Fetch all post titles
       query = from p in Post,
-                select: p.title
+           select: p.title
       MyRepo.all(query)
   """
   @doc group: "Query API"
   @callback all(queryable :: Ecto.Queryable.t(), opts :: Keyword.t()) :: [Ecto.Schema.t() | term]
-
-  @doc """
-  Fetches all entries from the data store matching the given query and conditions.
-
-  May raise `Ecto.QueryError` if query validation fails.
-
-  This function is a shortcut for `c:all/2` when adjusting the given query with simple conditions.
-
-  See also `c:all/2` and `c:get_by/3`.
-
-  ## Options
-
-    * `:prefix` - The prefix to run the query on (such as the schema path
-      in Postgres or the database in MySQL). This will be applied to all `from`
-      and `join`s in the query that did not have a prefix previously given
-      either via the `:prefix` option on `join`/`from` or via `@schema_prefix`
-      in the schema. For more information see the ["Query Prefix"](`m:Ecto.Query#module-query-prefix`) section of the
-      `Ecto.Query` documentation.
-
-  See the ["Shared options"](#module-shared-options) section at the module
-  documentation for more options.
-
-  ## Example
-
-      MyRepo.all_by(Post, author_id: 1)
-
-      query = from p in Post
-      MyRepo.all_by(query, author_id: 1)
-  """
-  @doc group: "Query API"
-  @callback all_by(
-              queryable :: Ecto.Queryable.t(),
-              clauses :: Keyword.t() | map,
-              opts :: Keyword.t()
-            ) :: [Ecto.Schema.t() | term]
 
   @doc """
   Returns a lazy enumerable that emits all entries from the data store
@@ -1495,11 +1323,10 @@ defmodule Ecto.Repo do
   ## Example
 
       # Fetch all post titles
-      query = from p in Post, select: p.title
-
+      query = from p in Post,
+           select: p.title
       stream = MyRepo.stream(query)
-
-      MyRepo.transact(fn ->
+      MyRepo.transaction(fn ->
         Enum.to_list(stream)
       end)
   """
@@ -1606,8 +1433,7 @@ defmodule Ecto.Repo do
                       delete!: 2,
                       insert_or_update: 2,
                       insert_or_update!: 2,
-                      prepare_query: 3,
-                      prepare_transaction: 2
+                      prepare_query: 3
 
   @doc """
   Inserts all entries into the repository.
@@ -1716,13 +1542,10 @@ defmodule Ecto.Repo do
       or `{:replace, fields}` explicitly instead. This option requires a schema
 
     * `{:replace_all_except, fields}` - same as above except the given fields
-      (and the ones given as conflict target) are not replaced. This option
-      requires a schema
+      are not replaced. This option requires a schema
 
     * `{:replace, fields}` - replace only specific columns. This option requires
-      `:conflict_target`. Generally speaking, you want to make sure the given
-      fields to replace do not overlap with the `conflict_target` as databases
-      can then perform more efficient upserts
+      `:conflict_target`
 
     * a keyword list of update instructions - such as the one given to
       `c:update_all/3`, for example: `[set: [title: "new title"]]`
@@ -1856,7 +1679,7 @@ defmodule Ecto.Repo do
   A typical example is calling `MyRepo.insert/1` with a struct
   and acting on the return value:
 
-      case MyRepo.insert(%Post{title: "Ecto is great"}) do
+      case MyRepo.insert %Post{title: "Ecto is great"} do
         {:ok, struct}       -> # Inserted with success
         {:error, changeset} -> # Something went wrong
       end
@@ -2055,8 +1878,8 @@ defmodule Ecto.Repo do
   ## Example
 
       post = MyRepo.get!(Post, 42)
-      post = Ecto.Changeset.change(post, title: "New title")
-      case MyRepo.update(post) do
+      post = Ecto.Changeset.change post, title: "New title"
+      case MyRepo.update post do
         {:ok, struct}       -> # Updated with success
         {:error, changeset} -> # Something went wrong
       end
@@ -2077,7 +1900,7 @@ defmodule Ecto.Repo do
   the database. So even if the struct exists, this won't work:
 
       struct = %Post{id: "existing_id", ...}
-      MyRepo.insert_or_update(changeset)
+      MyRepo.insert_or_update changeset
       # => {:error, changeset} # id already exists
 
   ## Options
@@ -2107,7 +1930,7 @@ defmodule Ecto.Repo do
           post -> post          # Post exists, let's use it
         end
         |> Post.changeset(changes)
-        |> MyRepo.insert_or_update()
+        |> MyRepo.insert_or_update
 
       case result do
         {:ok, struct}       -> # Inserted or updated with success
@@ -2166,7 +1989,7 @@ defmodule Ecto.Repo do
   ## Example
 
       post = MyRepo.get!(Post, 42)
-      case MyRepo.delete(post) do
+      case MyRepo.delete post do
         {:ok, struct}       -> # Deleted with success
         {:error, changeset} -> # Something went wrong
       end
@@ -2213,12 +2036,10 @@ defmodule Ecto.Repo do
 
   ## Ecto.Adapter.Transaction
 
-  @optional_callbacks transaction: 2, transact: 2, in_transaction?: 0, rollback: 1
+  @optional_callbacks transaction: 2, in_transaction?: 0, rollback: 1
 
   @doc """
   Runs the given function or `Ecto.Multi` inside a transaction.
-
-  Deprecated in favor of `c:transact/2`.
 
   ## Use with function
 
@@ -2249,7 +2070,42 @@ defmodule Ecto.Repo do
   A successful transaction returns the value returned by the function
   wrapped in a tuple as `{:ok, value}`.
 
-  See `c:transact/2` for further considerations.
+  ### Nested transactions
+
+  If `c:transaction/2` is called inside another transaction, the function
+  is simply executed, without wrapping the new transaction call in any
+  way. If there is an error in the inner transaction and the error is
+  rescued, or the inner transaction is rolled back, the whole outer
+  transaction is aborted, guaranteeing nothing will be committed.
+
+  Below is an example of how rollbacks work with nested transactions:
+
+      {:error, :rollback} =
+        MyRepo.transaction(fn ->
+          {:error, :posting_not_allowed} =
+            MyRepo.transaction(fn ->
+              # This function call causes the following to happen:
+              #
+              #   * the transaction is rolled back in the database,
+              #   * code execution is stopped within the current function,
+              #   * and the value, passed to `rollback/1` is returned from
+              #     `MyRepo.transaction/1` as the second element in the error
+              #     tuple.
+              #
+              MyRepo.rollback(:posting_not_allowed)
+
+              # `rollback/1` stops execution, so code here won't be run
+            end)
+
+          # The transaction here is now aborted and any further
+          # operation will raise an exception.
+        end)
+
+  See the ["Aborted transactions"](`c:transaction/2#aborted-transactions`) section for more examples of aborted
+  transactions and how to handle them.
+
+  In practice, managing nested transactions can become complex quickly.
+  For this reason, Ecto provides `Ecto.Multi` for composing transactions.
 
   ## Use with Ecto.Multi
 
@@ -2263,124 +2119,7 @@ defmodule Ecto.Repo do
       # With Ecto.Multi
       Ecto.Multi.new()
       |> Ecto.Multi.insert(:post, %Post{})
-      |> MyRepo.transaction()
-
-  In case of any errors the transaction will be rolled back and
-  `{:error, failed_operation, failed_value, changes_so_far}` will be returned.
-
-  Explore the `Ecto.Multi` documentation to learn more and find detailed examples.
-
-  ## Options
-
-  See the ["Shared options"](#module-shared-options) section at the module
-  documentation for more options.
-  """
-  @doc group: "Transaction API"
-  @doc deprecated: "Use Repo.transact/2"
-  @callback transaction(fun_or_multi :: fun | Ecto.Multi.t(), opts :: Keyword.t()) ::
-              {:ok, any}
-              | {:error, any}
-              | Ecto.Multi.failure()
-
-  @doc """
-  Runs the given function or `Ecto.Multi` inside a transaction.
-
-  ## Use with function
-
-  `c:transact/2` can be called with both a function of arity
-  zero or one. The arity zero function will just be executed as is:
-
-      Repo.transact(fn ->
-        alice = Repo.insert!(alice_changeset)
-        bob = Repo.insert!(bob_changeset)
-        {:ok, [alice, bob]}
-      end)
-
-  While the arity one function will receive the repo of the transaction
-  as its first argument:
-
-      Repo.transact(fn repo ->
-        alice = repo.insert!(alice_changeset)
-        bob = repo.insert!(bob_changeset)
-        {:ok, [alice, bob]}
-      end)
-
-  The return value is the same as of the given `fun` which must be
-  `{:ok, result}` or `{:error, reason}`.
-
-  If this function returns `{:ok, result}`, it means the transaction
-  was successfully committed. On the other hand, if it returns `{:error, reason}`,
-  it means the transaction was rolled back.
-
-  This function is commonly used with `with/1`:
-
-      Repo.transact(fn ->
-        with {:ok, alice} <- Repo.insert(alice_changeset),
-             {:ok, bob} <- Repo.insert(bob_changeset) do
-          {:ok, [alice, bob]}
-        end
-      end)
-
-  If an Elixir exception occurs the transaction will be rolled back
-  and the exception will bubble up from the transaction function.
-  If no exception occurs, the transaction is committed if the function
-  returns `{:ok, result}`. Returning `{:error, result}` will rollback the transaction
-  and this function will return `{:error, result}` as well.
-  A transaction can be explicitly rolled back
-  by calling `c:rollback/1`, this will immediately leave the function
-  and return the value given to `rollback` as `{:error, value}`.
-
-  ### Nested transactions
-
-  If `c:transact/2` is called inside another transaction, the function
-  is simply executed, without wrapping the new transaction call in any
-  way. If there is an error in the inner transaction and the error is
-  rescued, or the inner transaction is rolled back, the whole outer
-  transaction is aborted, guaranteeing nothing will be committed.
-
-  Below is an example of how rollbacks work with nested transactions:
-
-      {:error, :rollback} =
-        Repo.transact(fn ->
-          {:error, :posting_not_allowed} =
-            Repo.transact(fn ->
-              # This function call causes the following to happen:
-              #
-              #   * the transaction is rolled back in the database,
-              #   * code execution is stopped within the current function,
-              #   * and the value, passed to `rollback/1` is returned from
-              #     `Repo.transaction/1` as the second element in the error
-              #     tuple.
-              #
-              Repo.rollback(:posting_not_allowed)
-
-              # `rollback/1` stops execution, so code here won't be run
-            end)
-
-          # The transaction here is now aborted and any further
-          # operation will raise an exception.
-        end)
-
-  See the ["Aborted transactions"](`c:transact/2#aborted-transactions`) section for more examples
-  of aborted transactions and how to handle them.
-
-  In practice, managing nested transactions can become complex quickly. As a rule of thumb, avoid them
-  in favour of composing operations inside a single transaction using regular control flow and `with/1`
-  or use `Ecto.Multi` described next.
-
-  ## Use with Ecto.Multi
-
-  `c:transact/2` also accepts the `Ecto.Multi` struct as first argument.
-  `Ecto.Multi` allows you to compose transactions operations, step by step,
-  and manage what happens in case of success or failure.
-
-  When an `Ecto.Multi` is given to this function, a transaction will be started,
-  all operations applied and in case of success committed returning `{:ok, changes}`:
-
-      # With Ecto.Multi
-      Ecto.Multi.new()
-      |> Ecto.Multi.insert(:post, %Post{})
-      |> Repo.transact()
+      |> MyRepo.transaction
 
   In case of any errors the transaction will be rolled back and
   `{:error, failed_operation, failed_value, changes_so_far}` will be returned.
@@ -2396,50 +2135,39 @@ defmodule Ecto.Repo do
 
   Take the following transaction as an example:
 
-      Repo.transact(fn repo ->
-        case Repo.insert(changeset) do
+      Repo.transaction(fn repo ->
+        case repo.insert(changeset) do
           {:ok, post} ->
-            Repo.insert(%Status{value: "success"})
+            repo.insert(%Status{value: "success"})
 
           {:error, changeset} ->
-            Repo.insert(%Status{value: "failure"})
+            repo.insert(%Status{value: "failure"})
         end
       end)
 
   If the changeset is valid, but the insert operation fails due to a database constraint,
-  the subsequent `Repo.insert(%Status{value: "failure"})` operation will raise an exception
+  the subsequent `repo.insert(%Status{value: "failure"})` operation will raise an exception
   because the database has already aborted the transaction and thus making the operation invalid.
   In Postgres, the exception would look like this:
 
       ** (Postgrex.Error) ERROR 25P02 (in_failed_sql_transaction) current transaction is aborted, commands ignored until end of transaction block
 
   If the changeset is invalid before it reaches the database due to a validation error,
-  no statement is sent to the database, an `:error` tuple is returned, and `Repo.insert(%Status{value: "failure"})`
+  no statement is sent to the database, an `:error` tuple is returned, and `repo.insert(%Status{value: "failure"})`
   operation will execute as usual.
 
   We have two options to deal with such scenarios:
 
   If you don't want to change the semantics of your code,  you can also use the savepoints
-  feature by passing the `:mode` option like this: `Repo.insert(changeset, mode: :savepoint)`.
+  feature by passing the `:mode` option like this: `repo.insert(changeset, mode: :savepoint)`.
   In case of an exception, the transaction will rollback to the savepoint and prevent
   the transaction from failing.
 
-  Another alternative is to handle this operation outside of the transaction:
-
-      result =
-        Repo.transact(fn ->
-          with {:ok, post} <- Repo.insert(changeset) do
-            Repo.insert(%Status{value: "success"})
-          end
-        end)
-
-      case result do
-        {:ok, _} ->
-          :ok
-
-        {:error, _changeset} ->
-          Repo.insert!(%Status{value: "failure"})
-      end
+  Another alternative is to handle this operation outside of the transaction.
+  For example, you can choose to perform an explicit `repo.rollback` call in the
+  `{:error, changeset}` clause and then perform the `repo.insert(%Status{value: "failure"})` outside
+  of the transaction. You might also consider using `Ecto.Multi`, as they automatically
+  rollback whenever an operation fails.
 
   ## Working with processes
 
@@ -2459,49 +2187,11 @@ defmodule Ecto.Repo do
 
   See the ["Shared options"](#module-shared-options) section at the module
   documentation for more options.
-
-  ## Examples
-
-  If the transaction was successful, `{:ok, result}` is returned:
-
-      iex> Repo.transact(fn ->
-      ...>   Repo.insert(changeset)
-      ...> end)
-      {:ok, %User{}}
-
-  If the transaction failed, `{:error, reason}` is returned:
-
-      iex> Repo.transact(fn ->
-      ...>   Repo.insert(changeset)
-      ...> end)
-      {:error, #Ecto.Changeset<...>}
-
-  Transaction can be aborted by returning `{:error, reason}`, calling `c:rollback/1`,
-  or raising from the given `fun`:
-
-      iex> Repo.transact(fn ->
-      ...>   Repo.insert!(%User{}) # will be rolled back
-      ...>   {:error, :oops}
-      ...> end)
-      {:error, :oops}
-
-      iex> Repo.transact(fn ->
-      ...>   Repo.insert!(%User{}) # will be rolled back
-      ...>   Repo.rollback(:oops)
-      ...> end)
-      {:error, :oops}
-
-      iex> Repo.transact(fn ->
-      ...>   Repo.insert!(%User{}) # will be rolled back
-      ...>   raise "oops"
-      ...> end)
-      ** (RuntimeError) oops
   """
   @doc group: "Transaction API"
-  @callback transact(fun :: (-> result), opts :: Keyword.t()) :: result
-            when result: {:ok, any()} | {:error, any()}
-  @callback transact(multi :: Ecto.Multi.t(), opts :: Keyword.t()) ::
-              {:ok, map()}
+  @callback transaction(fun_or_multi :: fun | Ecto.Multi.t(), opts :: Keyword.t()) ::
+              {:ok, any}
+              | {:error, any}
               | Ecto.Multi.failure()
 
   @doc """
@@ -2514,11 +2204,11 @@ defmodule Ecto.Repo do
 
   ## Examples
 
-      MyRepo.in_transaction?()
+      MyRepo.in_transaction?
       #=> false
 
-      MyRepo.transact(fn ->
-        MyRepo.in_transaction?() #=> true
+      MyRepo.transaction(fn ->
+        MyRepo.in_transaction? #=> true
       end)
 
   """

@@ -77,7 +77,7 @@ configuration options.
 
   ```elixir
   def deps do
-    [{:swoosh, "~> 1.19"}]
+    [{:swoosh, "~> 1.17"}]
   end
   ```
 
@@ -142,7 +142,6 @@ included:
 | SparkPost    | [Swoosh.Adapters.SparkPost](https://hexdocs.pm/swoosh/Swoosh.Adapters.SparkPost.html#content)       |                  |
 | Amazon SES   | [Swoosh.Adapters.AmazonSES](https://hexdocs.pm/swoosh/Swoosh.Adapters.AmazonSES.html#content)       |                  |
 | Amazon SES   | [Swoosh.Adapters.ExAwsAmazonSES](https://hexdocs.pm/swoosh/Swoosh.Adapters.ExAwsAmazonSES.html)     |                  |
-| Customer.io  | [Swoosh.Adapters.CustomerIO](https://hexdocs.pm/swoosh/Swoosh.Adapters.CustomerIO.html)             |                  |
 | Dyn          | [Swoosh.Adapters.Dyn](https://hexdocs.pm/swoosh/Swoosh.Adapters.Dyn.html#content)                   |                  |
 | Scaleway     | [Swoosh.Adapters.Scaleway](https://hexdocs.pm/swoosh/Swoosh.Adapters.Scaleway.html#content)         |                  |
 | SocketLabs   | [Swoosh.Adapters.SocketLabs](https://hexdocs.pm/swoosh/Swoosh.Adapters.SocketLabs.html#content)     |                  |
@@ -153,10 +152,6 @@ included:
 | Mailtrap     | [Swoosh.Adapters.Mailtrap](https://hexdocs.pm/swoosh/Swoosh.Adapters.Mailtrap.html#content)         |                  |
 | ZeptoMail    | [Swoosh.Adapters.ZeptoMail](https://hexdocs.pm/swoosh/Swoosh.Adapters.ZeptoMail.html#content)       |                  |
 | Postal       | [Swoosh.Adapters.Postal](https://hexdocs.pm/swoosh/Swoosh.Adapters.Postal.html#content)             |                  |
-| Lettermint   | [Swoosh.Adapters.Lettermint](https://hexdocs.pm/swoosh/Swoosh.Adapters.Lettermint.html#content)     |                  |
-| ------ | **Below are not fully featured services** | ------ |
-| Loops        | [Swoosh.Adapters.Loops](https://hexdocs.pm/swoosh/Swoosh.Adapters.Loops.html#content)               |                  |
-| PostUp       | [Swoosh.Adapters.PostUp](https://hexdocs.pm/swoosh/Swoosh.Adapters.PostUp.html#content)             |                  |
 
 Configure which adapter you want to use by updating your `config/config.exs`
 file:
@@ -172,14 +167,6 @@ configurations and instructions.
 
 Adding new adapters is super easy and we are definitely looking for
 contributions on that front. Get in touch if you want to help!
-
-### Third-party Adapters
-
-Adapters for email providers not included by Swoosh, maintained by Elixir community members.
-
-| Provider     | Swoosh adapter                                                                                      | Remarks          |
-| ------------ | --------------------------------------------------------------------------------------------------- | ---------------- |
-| Resend       | [Resend.Swoosh.Adapter](https://hexdocs.pm/resend/Resend.Swoosh.Adapter.html)                       |                  |
 
 ## Recipient
 

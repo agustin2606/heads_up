@@ -4,7 +4,7 @@ defmodule ThousandIsland.MixProject do
   def project do
     [
       app: :thousand_island,
-      version: "1.4.3",
+      version: "1.3.12",
       elixir: "~> 1.13",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -16,10 +16,7 @@ defmodule ThousandIsland.MixProject do
       package: [
         maintainers: ["Mat Trudel"],
         licenses: ["MIT"],
-        links: %{
-          "GitHub" => "https://github.com/mtrudel/thousand_island",
-          "Changelog" => "https://hexdocs.pm/thousand_island/changelog.html"
-        },
+        links: %{"GitHub" => "https://github.com/mtrudel/thousand_island"},
         files: ["lib", "mix.exs", "README*", "LICENSE*", "CHANGELOG*"]
       ],
       docs: docs()
@@ -64,10 +61,6 @@ defmodule ThousandIsland.MixProject do
     [
       main: "ThousandIsland",
       logo: "assets/ex_doc_logo.png",
-      extras: ["CHANGELOG.md"],
-      groups_for_extras: [
-        Changelog: ~r/CHANGELOG\.md/
-      ],
       groups_for_modules: [
         Transport: [
           ThousandIsland.Transport,

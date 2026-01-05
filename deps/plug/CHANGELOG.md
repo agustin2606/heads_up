@@ -1,43 +1,5 @@
 # Changelog
 
-## v1.19.1 (2025-12-09)
-
-### Bug fixes
-
-  * [Plug.SSL] Fix `cypher_suite: :strong` compatibility
-
-## v1.19.0 (2025-12-08)
-
-This release requires Elixir v1.14+ and it bumps the recommended :strong and :compatible SSL/TLS ciphers suite to align with modern security standards, prioritizing TLS 1.3 and 1.2. Support for the insecure TLS 1.0 and 1.1 protocols are removed in accordance with RFC 8996.
-
-### Enhancements
-
-  * [Plug.Router] Allow colon for named segments to be escaped
-  * [Plug.SSL] Prioritize TLS 1.3 and 1.2 ciphers
-  * [Plug.SSL] Allow excluding redirects based on hosts, paths, or the connection
-  * [Plug.Static] Add `:raise_on_missing_only`
-  * [Plug.Upload] Partition the uploader to improve performance
-  * [Plug.Upload] Add API for deleting files
-
-### Deprecations
-
-  * [Plug.Conn.Adapter] Deprecate `:owner` field
-
-## v1.18.1 (2025-07-01)
-
-### Enhancements
-
-  * [Plug.Debugger] Do not include code snippets in rendered markdown
-  * [Plug.RewriteOn] Add support to rewrite nonstandard headers
-
-## v1.18.0 (2025-05-28)
-
-### Enhancements
-
-  * [Plug.Conn] Define optional `get_sock_data/1` and `get_ssl_data/1` callbacks
-  * [Plug.RequestID] Allow metadata key to be customizable
-  * [Plug.Router] Allow match to dispatch to function plugs
-
 ## v1.17.0 (2025-03-14)
 
 ### Enhancements
@@ -355,7 +317,7 @@ Require Elixir v1.10+.
 ### Enhancements
 
   * [Plug.Conn] Add `get_session/1` for retrieving the whole session
-  * [Plug.CSRFProtection] Add `Plug.CSRFProtection.load_state/2` and `Plug.CSRFProtection.dump_state/0` to allow tokens to be generated in other processes
+  * [Plug.CSRFProtection] Add `Plug.CSRFPRotection.load_state/2` and `Plug.CSRFPRotection.dump_state/0` to allow tokens to be generated in other processes
   * [Plug.Parsers] Allow unnamed parts in multipart parser via `:include_unnamed_parts_at`
   * [Plug.Router] Wrap router dispatch in a connection checkpoint to avoid losing information attached to the connection in error cases
   * [Plug.Telemetry] Add `Plug.Telemetry` to facilitate with telemetry integration

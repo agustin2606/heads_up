@@ -10,7 +10,7 @@ defmodule Phoenix.LiveComponent do
   This is a contrast to `Phoenix.Component`, also known as "function components",
   which are stateless and do not have a life-cycle.
 
-  The simplest LiveComponent only needs to define a `c:render/1` function:
+  The smallest LiveComponent only needs to define a `c:render/1` function:
 
       defmodule HeroComponent do
         # In Phoenix apps, the line is typically: use MyAppWeb, :live_component
@@ -23,7 +23,7 @@ defmodule Phoenix.LiveComponent do
         end
       end
 
-  A LiveComponent is rendered with:
+  A LiveComponent is rendered as:
 
   ```heex
   <.live_component module={HeroComponent} id="hero" content={@content} />
@@ -34,14 +34,17 @@ defmodule Phoenix.LiveComponent do
   component. All other attributes will be available as assigns inside the
   LiveComponent.
 
-  > #### Functional components or live components? {: .tip}
+  > #### Functional components or live components? {: .neutral}
   >
-  > Generally speaking, prefer function components over live components as they
-  > are a simpler abstraction with a smaller surface area. The use case for
-  > live components only arises when there is a need to encapsulate both
-  > event handling and additional state.
+  > Generally speaking, you should prefer function components over live
+  > components, as they are a simpler abstraction, with a smaller surface
+  > area. The use case for live components only arises when there is a need
+  > for encapsulating both event handling and additional state.
   >
-  > Avoid using LiveComponents merely for code organization purposes.
+  > Similarly, avoid using LiveComponents for code design purposes, where
+  > their main goal is to organize code, rather than sharing it across
+  > LiveViews. When it comes to code organization and design, Elixir developers
+  > prefer to use functions and data structures.
 
   ## Life-cycle
 
@@ -208,8 +211,8 @@ defmodule Phoenix.LiveComponent do
 
   All of the life-cycle events are summarized in the diagram below.
   The bubble events in white are triggers that invoke the component.
-  In purple are component callbacks; the underlined names
-  represent required callbacks.
+  In blue you have component callbacks, where the underlined names
+  represent required callbacks:
 
   ```mermaid
   flowchart LR

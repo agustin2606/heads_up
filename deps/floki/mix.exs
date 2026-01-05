@@ -3,7 +3,7 @@ defmodule Floki.Mixfile do
 
   @description "Floki is a simple HTML parser that enables search for nodes using CSS selectors."
   @source_url "https://github.com/philss/floki"
-  @version "0.38.0"
+  @version "0.37.0"
 
   def project do
     [
@@ -11,7 +11,7 @@ defmodule Floki.Mixfile do
       name: "Floki",
       version: @version,
       description: @description,
-      elixir: "~> 1.15",
+      elixir: "~> 1.14",
       package: package(),
       erlc_paths: ["src", "gen"],
       compilers: [:leex | Mix.compilers()],
@@ -33,7 +33,7 @@ defmodule Floki.Mixfile do
     [
       extras: ["CHANGELOG.md", {:"README.md", [title: "Overview"]}],
       main: "readme",
-      assets: %{"assets" => "assets"},
+      assets: "assets",
       logo: "assets/images/floki-logo.svg",
       source_url: @source_url,
       source_ref: "v#{@version}",
@@ -45,8 +45,8 @@ defmodule Floki.Mixfile do
     [
       {:jason, "~> 1.1", only: [:dev, :test, :docs]},
       {:earmark, "~> 1.2", only: :dev},
-      {:ex_doc, "~> 0.38.2", only: :dev, runtime: false},
-      {:benchee, "~> 1.4.0", only: :dev},
+      {:ex_doc, "~> 0.35.1", only: :dev, runtime: false},
+      {:benchee, "~> 1.3.0", only: :dev},
       {:benchee_html, "~> 1.0", only: :dev},
       {:credo, ">= 0.0.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},

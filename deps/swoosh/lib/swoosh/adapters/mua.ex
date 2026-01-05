@@ -185,7 +185,7 @@ defmodule Swoosh.Adapters.Mua do
     |> Enum.uniq()
   end
 
-  def render(email) do
+  defp render(email) do
     Mail.build_multipart()
     |> put_headers(email)
     |> maybe(&Mail.put_from/2, email.from)
@@ -206,20 +206,7 @@ defmodule Swoosh.Adapters.Mua do
     Enum.reduce(attachments, mail, fn attachment, mail ->
       %Swoosh.Attachment{filename: filename, content_type: content_type} = attachment
       data = Swoosh.Attachment.get_content(attachment)
-
-      disposition =
-        if attachment.type == :inline do
-          [
-            content_disposition: ["inline", filename: filename],
-            content_id: "<#{attachment.cid || filename}>"
-          ]
-        else
-          [content_disposition: ["attachment", filename: filename]]
-        end
-
-      Mail.put_attachment(mail, {filename, data},
-        headers: [content_type: content_type] ++ disposition
-      )
+      Mail.put_attachment(mail, {filename, data}, headers: [content_type: content_type])
     end)
   end
 

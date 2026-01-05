@@ -58,7 +58,10 @@ if Code.ensure_loaded?(Plug) do
 
     post "/clear" do
       conn.assigns.storage_driver.delete_all()
-      redir(conn, conn.assigns.base_path)
+
+      conn
+      |> put_resp_header("location", conn.assigns.base_path)
+      |> send_resp(302, ~c"")
     end
 
     get "/json" do
@@ -71,15 +74,11 @@ if Code.ensure_loaded?(Plug) do
     end
 
     get "/" do
-      case conn.assigns.storage_driver.all() do
-        [%Swoosh.Email{headers: %{"Message-ID" => id}} | _] ->
-          redir(conn, Path.join(conn.assigns.base_path, id))
+      emails = conn.assigns.storage_driver.all()
 
-        emails ->
-          conn
-          |> put_resp_content_type("text/html")
-          |> send_resp(200, template(emails: emails, email: nil, conn: conn))
-      end
+      conn
+      |> put_resp_content_type("text/html")
+      |> send_resp(200, template(emails: emails, email: nil, conn: conn))
     end
 
     get "/:id/html" do
@@ -182,9 +181,6 @@ if Code.ensure_loaded?(Plug) do
 
     defp render_value(value), do: Plug.HTML.html_escape(value)
 
-    defp render_email_name(%{from: {name, _email_address}}), do: render_value(name)
-    defp render_email_name(%{from: "TEMPLATE"}), do: "TEMPLATE"
-
     defp replace_inline_references(%{html_body: nil, text_body: text_body}) do
       text_body
     end
@@ -199,16 +195,6 @@ if Code.ensure_loaded?(Plug) do
           nil -> html_body
         end
       end)
-    end
-
-    defp redir(conn, location) do
-      conn
-      |> put_resp_header("location", location)
-      |> put_resp_content_type("text/html")
-      |> send_resp(
-        302,
-        "<html><body>You are being <a href=\"#{location}\">redirected</a>.</body></html>"
-      )
     end
   end
 end

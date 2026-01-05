@@ -3,6 +3,8 @@ defmodule Phoenix.LiveView.UploadChannel do
   use Phoenix.Channel, log_handle_in: false
   @timeout :infinity
 
+  require Logger
+
   alias Phoenix.LiveView.{Static, Channel}
 
   def cancel(pid) do

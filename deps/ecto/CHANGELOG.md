@@ -1,81 +1,11 @@
 # Changelog for v3.x
 
-## v3.13.5 (2025-11-09)
-
-### Enhancements
-
-  * [Ecto.Query] Support selecting a subset of a subquery as a struct
-
-## v3.13.4 (2025-10-24)
-
-### Bug fixes
-
-  * [Ecto.Changeset] Ensure empty binaries are trimmed
-  * [Ecto.Repo] Ensure rollback applies to dynamic repos
-  * [Ecto.Type] Properly format `:in` composite types
-
-## v3.13.3 (2025-09-19)
-
-### Enhancements
-
-  * [Ecto.Query] Accept a list of things to exclude in `exclude`
-
-### Bug fixes
-
-  * [Ecto.Query] Allow 2-arity functions as preload function in query
-  * [Ecto.Query] Remove soft deprecated literal warning
-  * [Ecto.Schema] Do not consider space and newlines as empty for binary types
-
-## v3.13.2 (2025-06-24)
-
-### Bug fixes
-
-  * [Ecto.Query] Fix regression which made queries with multiple joins expensive to compile
-  * [Ecto.Repo] Fix detection of missing primary key on associations with only nil entries
-  * [Ecto.Query] Fix macro expansion in `over` clause's `order_by`
-
-## v3.13.1 (2025-06-19)
-
-### Bug fixes
-
-  * [Ecto.Repo] Do not automatically apply HOT updates on upsert with `replace`. It is the user responsibility to make sure they do not overlap
-
-## v3.13.0 (2025-06-18)
-
-Requires Elixir v1.14+.
-
-### Enhancements
-
-  * [Ecto] Support Elixir's built-in JSON
-  * [Ecto.Enum] Add `Ecto.Enum.cast_value/3`
-  * [Ecto.Query] Allow schema to be used for `values` list types
-  * [Ecto.Query] Allow strings in `field/2`
-  * [Ecto.Query] Add `identifier/1` in queries
-  * [Ecto.Query] Add `constant/1` in queries
-  * [Ecto.Query] Allow `exclude/2` to remove windows
-  * [Ecto.Query] Allow source fields in `json_extract_path`
-  * [Ecto.Repo] Add `Ecto.Repo.prepare_transaction/2` user callback
-  * [Ecto.Repo] Add `Ecto.Repo.all_by/3`
-  * [Ecto.Repo] Add `Ecto.Repo.transact/2`
-  * [Ecto.Repo] Allow HOT updates on upsert queries in Postgres by removing duplicate fields during `replace_all_except`
-  * [Ecto.Schema] Support `@schema_redact: :all_except_primary_keys` module attribute
-
-### Bug fixes
-
-  * [Ecto.Query] Allow select merging maps with all nil values
-  * [Ecto.Query] `map/2` in queries now always returns a map on joins, even on left joins, for consistency with `from` sources
-  * [Ecto.Schema] Fix an issue where Ecto could warn an association did not exist, when it did
-
-### Soft deprecations (no warnings emitted)
-
-  * [Ecto.Repo] `Ecto.Repo.transaction/2` is soft-deprecated in favor of `Ecto.Repo.transact/1`
-  * [Ecto.Query.API] `literal/1` is deprecated in favor of `identifier/1`
-
-## v3.12.6 (2025-06-11)
-
-Fix deprecations on Elixir v1.19.
-
 ## v3.12.5 (2024-11-28)
+
+### Enhancements
+
+  * [Ecto.Repo] Use `persistent_term` for faster repository lookup
+  * [Ecto.Repo] Document new `:pool_count` option
 
 ### Bug fixes
 
@@ -133,7 +63,7 @@ Fix deprecations on Elixir v1.19.
   * [Ecto.Query] Allow map updates with dynamic values in `select`
   * [Ecto.Query] Allow any data structure that implements the Enumerable protocol on the right side of `in`
   * [Ecto.Repo] Support 2-arity preload functions that receive ids and the association metadata
-  * [Ecto.Repo] Allow HOT updates on upsert queries in Postgres by removing duplicate fields during `replace_all`
+  * [Ecto.Repo] Allow Hot Updates on upsert queries in Postgres by removing duplicate fields during replace_all
   * [Ecto.Repo] `insert_all` supports queries with only source
   * [Ecto.Repo] `insert_all` supports queries with the update syntax
   * [Ecto.Repo] Support `:allow_stale` on Repo struct/changeset operations

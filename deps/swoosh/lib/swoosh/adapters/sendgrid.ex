@@ -12,8 +12,7 @@ defmodule Swoosh.Adapters.Sendgrid do
     :mail_settings,
     :tracking_settings,
     :send_at,
-    :batch_id,
-    :ip_pool_name
+    :batch_id
   ]
 
   @moduledoc ~s"""
@@ -69,7 +68,6 @@ defmodule Swoosh.Adapters.Sendgrid do
         subscription_tracking: %{enable: false}
       })
       |> put_provider_option(:batch_id, "AsdFgHjklQweRTYuIopzXcVBNm0aSDfGHjklmZcVbNMqWert1znmOP2asDFjkl")
-      |> put_provider_option(:ip_pool_name, "my-pool-name")
       |> put_provider_option(:send_at, 1617260400)
 
   ## Provider Options
@@ -106,8 +104,6 @@ defmodule Swoosh.Adapters.Sendgrid do
     * `:batch_id` (string) - An ID representing a batch of emails to be sent at
       the same time. It also enables you to cancel or pause the delivery of that batch
 
-    * `:ip_pool_name` (string) - The name of the IP Pool you wish to send using
-
   ## Sandbox mode
 
   For [sandbox mode](https://sendgrid.com/docs/for-developers/sending-email/sandbox-mode/), use `put_provider_option/3`:
@@ -127,7 +123,6 @@ defmodule Swoosh.Adapters.Sendgrid do
     headers =
       [
         {"Content-Type", "application/json"},
-        {"Accept", "application/json"},
         {"User-Agent", "swoosh/#{Swoosh.version()}"},
         {"Authorization", "Bearer #{config[:api_key]}"}
       ]

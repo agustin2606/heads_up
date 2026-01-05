@@ -10,13 +10,6 @@ defmodule Ecto.Adapters.MyXQL do
   below. All options can be given via the repository
   configuration:
 
-      config :your_app, YourApp.Repo,
-        ...
-
-  The `:prepare` option may be specified per operation:
-
-      YourApp.Repo.all(Queryable, prepare: :unnamed)
-
   ### Connection options
 
     * `:protocol` - Set to `:socket` for using UNIX domain socket, or `:tcp` for TCP
@@ -154,12 +147,9 @@ defmodule Ecto.Adapters.MyXQL do
   @behaviour Ecto.Adapter.Storage
   @behaviour Ecto.Adapter.Structure
 
-  @default_prepare_opt :named
-
   ## Custom MySQL types
 
   @impl true
-  def loaders({:array, _}, type), do: [&json_decode/1, type]
   def loaders({:map, _}, type), do: [&json_decode/1, &Ecto.Type.embedded_load(type, &1, :json)]
   def loaders(:map, type), do: [&json_decode/1, type]
   def loaders(:float, type), do: [&float_decode/1, type]
@@ -180,23 +170,6 @@ defmodule Ecto.Adapters.MyXQL do
 
   defp json_decode(x) when is_binary(x), do: {:ok, MyXQL.json_library().decode!(x)}
   defp json_decode(x), do: {:ok, x}
-
-  ## Query API
-
-  @impl Ecto.Adapter.Queryable
-  def execute(adapter_meta, query_meta, query, params, opts) do
-    prepare = Keyword.get(opts, :prepare, @default_prepare_opt)
-
-    unless valid_prepare?(prepare) do
-      raise ArgumentError,
-            "expected option `:prepare` to be either `:named` or `:unnamed`, got: #{inspect(prepare)}"
-    end
-
-    Ecto.Adapters.SQL.execute(prepare, adapter_meta, query_meta, query, params, opts)
-  end
-
-  defp valid_prepare?(prepare) when prepare in [:named, :unnamed], do: true
-  defp valid_prepare?(_), do: false
 
   ## Storage API
 
@@ -416,22 +389,16 @@ defmodule Ecto.Adapters.MyXQL do
   def structure_load(default, config) do
     path = config[:dump_path] || Path.join(default, "structure.sql")
 
-    case File.read(path) do
-      {:ok, contents} ->
-        args = [
-          "--execute",
-          "SET FOREIGN_KEY_CHECKS = 0; " <> contents <> "; SET FOREIGN_KEY_CHECKS = 1",
-          "--database",
-          config[:database]
-        ]
+    args = [
+      "--execute",
+      "SET FOREIGN_KEY_CHECKS = 0; SOURCE #{path}; SET FOREIGN_KEY_CHECKS = 1",
+      "--database",
+      config[:database]
+    ]
 
-        case run_with_cmd("mysql", config, args) do
-          {_output, 0} -> {:ok, path}
-          {output, _} -> {:error, output}
-        end
-
-      {:error, reason} ->
-        {:error, "could not read #{inspect(path)}: #{:file.format_error(reason)}"}
+    case run_with_cmd("mysql", config, args) do
+      {_output, 0} -> {:ok, path}
+      {output, _} -> {:error, output}
     end
   end
 

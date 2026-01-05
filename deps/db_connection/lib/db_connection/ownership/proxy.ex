@@ -2,7 +2,6 @@ defmodule DBConnection.Ownership.Proxy do
   @moduledoc false
 
   alias DBConnection.Holder
-  alias DBConnection.Util
   use GenServer, restart: :temporary
 
   @time_unit 1000
@@ -22,8 +21,6 @@ defmodule DBConnection.Ownership.Proxy do
 
   @impl true
   def init({caller, pool, pool_opts}) do
-    Util.set_label("db_ownership_proxy")
-
     pool_opts =
       pool_opts
       |> Keyword.put(:timeout, :infinity)
@@ -61,13 +58,13 @@ defmodule DBConnection.Ownership.Proxy do
 
   @impl true
   def handle_info({:DOWN, ref, _, pid, _reason}, %{owner: {_, ref}} = state) do
-    down("owner #{Util.inspect_pid(pid)} exited", state)
+    down("owner #{inspect(pid)} exited", state)
   end
 
   def handle_info({:timeout, deadline, {_ref, holder, pid, len}}, %{holder: holder} = state) do
     if Holder.handle_deadline(holder, deadline) do
       message =
-        "client #{Util.inspect_pid(pid)} timed out because " <>
+        "client #{inspect(pid)} timed out because " <>
           "it queued and checked out the connection for longer than #{len}ms"
 
       down(message, state)
@@ -81,7 +78,7 @@ defmodule DBConnection.Ownership.Proxy do
         %{ownership_timer: timer} = state
       ) do
     message =
-      "owner #{Util.inspect_pid(pid)} timed out because " <>
+      "owner #{inspect(pid)} timed out because " <>
         "it owned the connection for longer than #{timeout}ms (set via the :ownership_timeout option)"
 
     # We don't invoke down because this is always a disconnect, even if there is no client.
@@ -153,7 +150,7 @@ defmodule DBConnection.Ownership.Proxy do
   end
 
   def handle_info({:"ETS-TRANSFER", holder, pid, ref}, %{holder: holder, owner: {_, ref}} = state) do
-    down("client #{Util.inspect_pid(pid)} exited", state)
+    down("client #{inspect(pid)} exited", state)
   end
 
   @impl true

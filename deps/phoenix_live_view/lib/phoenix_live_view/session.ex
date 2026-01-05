@@ -12,15 +12,18 @@ defmodule Phoenix.LiveView.Session do
             router: nil,
             flash: nil,
             live_session_name: nil,
+            live_session_vsn: nil,
             assign_new: []
 
   def main?(%Session{} = session), do: session.router != nil and session.parent_pid == nil
 
   def authorize_root_redirect(%Session{} = session, %Route{} = route) do
-    %Session{live_session_name: session_name} = session
+    %Session{live_session_name: session_name, live_session_vsn: session_vsn} = session
 
     case route.live_session do
-      %{name: ^session_name} ->
+      # We check the version because if there was a new deploy,
+      # we can use this opportunity to reload the whole thing.
+      %{name: ^session_name, vsn: ^session_vsn} ->
         {:ok, replace_root(session, route.view, self())}
 
       %{} ->
@@ -60,7 +63,7 @@ defmodule Phoenix.LiveView.Session do
          :ok <- verify_topic(topic, id),
          {:ok, static} <- verify_static_token(endpoint, id, static_token) do
       merged_session = Map.merge(session, static)
-      live_session_name = merged_session[:live_session_name]
+      {live_session_name, vsn} = merged_session[:live_session] || {nil, nil}
 
       session = %Session{
         id: id,
@@ -71,6 +74,7 @@ defmodule Phoenix.LiveView.Session do
         session: merged_session.session,
         assign_new: merged_session.assign_new,
         live_session_name: live_session_name,
+        live_session_vsn: vsn,
         # optional keys
         router: merged_session[:router],
         flash: merged_session[:flash]

@@ -733,7 +733,7 @@ if Code.ensure_loaded?(Tds) do
     end
 
     defp expr({{:., _, [{:parent_as, _, [as]}, field]}, _, []}, _sources, query)
-         when is_atom(field) or is_binary(field) do
+         when is_atom(field) do
       {ix, sources} = get_parent_sources_ix(query, as)
       {_, name, _} = elem(sources, ix)
       [name, ?. | quote_name(field)]
@@ -826,16 +826,8 @@ if Code.ensure_loaded?(Tds) do
       [?(, values_list(types, idx + 1, num_rows), ?)]
     end
 
-    defp expr({:identifier, _, [literal]}, _sources, _query) do
+    defp expr({:literal, _, [literal]}, _sources, _query) do
       quote_name(literal)
-    end
-
-    defp expr({:constant, _, [literal]}, _sources, _query) when is_binary(literal) do
-      [?', escape_string(literal), ?']
-    end
-
-    defp expr({:constant, _, [literal]}, _sources, _query) when is_number(literal) do
-      [to_string(literal)]
     end
 
     defp expr({:splice, _, [{:^, _, [idx, length]}]}, _sources, _query) do
@@ -989,7 +981,7 @@ if Code.ensure_loaded?(Tds) do
     end
 
     defp values_list(types, idx, num_rows) do
-      rows = :lists.seq(1, num_rows, 1)
+      rows = Enum.to_list(1..num_rows)
 
       [
         "VALUES ",
@@ -1196,7 +1188,7 @@ if Code.ensure_loaded?(Tds) do
       include =
         index.include
         |> List.wrap()
-        |> Enum.map_intersperse(", ", &include_expr/1)
+        |> Enum.map_intersperse(", ", &index_expr/1)
 
       [
         [
@@ -1455,8 +1447,6 @@ if Code.ensure_loaded?(Tds) do
     end
 
     defp column_change(statement_prefix, table, {:modify, name, type, opts}) do
-      collation = Keyword.fetch(opts, :collation)
-
       [
         drop_constraint_from_expr(opts[:from], table, name, statement_prefix),
         maybe_drop_default_expr(statement_prefix, table, name, opts),
@@ -1467,7 +1457,6 @@ if Code.ensure_loaded?(Tds) do
           " ",
           column_type(type, opts),
           null_expr(Keyword.get(opts, :null)),
-          collation_expr(collation),
           "; "
         ],
         [column_default_value(statement_prefix, table, name, opts)]
@@ -1503,9 +1492,7 @@ if Code.ensure_loaded?(Tds) do
     defp column_options(table, name, opts) do
       default = Keyword.fetch(opts, :default)
       null = Keyword.get(opts, :null)
-      collation = Keyword.fetch(opts, :collation)
-
-      [null_expr(null), default_expr(table, name, default), collation_expr(collation)]
+      [null_expr(null), default_expr(table, name, default)]
     end
 
     defp column_default_value(statement_prefix, table, name, opts) do
@@ -1520,9 +1507,6 @@ if Code.ensure_loaded?(Tds) do
     defp null_expr(false), do: [" NOT NULL"]
     defp null_expr(true), do: [" NULL"]
     defp null_expr(_), do: []
-
-    defp collation_expr({:ok, collation_name}), do: " COLLATE #{collation_name}"
-    defp collation_expr(_), do: []
 
     defp default_expr(_table, _name, {:ok, nil}),
       do: []
@@ -1578,34 +1562,8 @@ if Code.ensure_loaded?(Tds) do
     defp constraint_name(type, table, name),
       do: quote_name("#{type}_#{table.prefix}_#{table.name}_#{name}")
 
-    defp index_expr({dir, literal})
-         when is_binary(literal),
-         do: index_dir(dir, literal)
-
-    defp index_expr({dir, literal}),
-      do: index_dir(dir, quote_name(literal))
-
     defp index_expr(literal) when is_binary(literal), do: literal
     defp index_expr(literal), do: quote_name(literal)
-
-    defp index_dir(dir, str)
-         when dir in [
-                :asc,
-                :asc_nulls_first,
-                :asc_nulls_last,
-                :desc,
-                :desc_nulls_first,
-                :desc_nulls_last
-              ] do
-      case dir do
-        :asc -> [str | " ASC"]
-        :desc -> [str | " DESC"]
-        _ -> error!(nil, "#{dir} is not supported in indexes in Tds adapter")
-      end
-    end
-
-    defp include_expr(literal) when is_binary(literal), do: literal
-    defp include_expr(literal), do: quote_name(literal)
 
     defp engine_expr(_storage_engine), do: [""]
 
@@ -1672,15 +1630,6 @@ if Code.ensure_loaded?(Tds) do
 
     defp reference_on_delete({:nilify, _columns}) do
       error!(nil, "Tds adapter does not support the `{:nilify, columns}` action for `:on_delete`")
-    end
-
-    defp reference_on_delete(:default_all), do: " ON DELETE SET DEFAULT"
-
-    defp reference_on_delete({:default, _columns}) do
-      error!(
-        nil,
-        "Tds adapter does not support the `{:default, columns}` action for `:on_delete`"
-      )
     end
 
     defp reference_on_delete(:delete_all), do: " ON DELETE CASCADE"

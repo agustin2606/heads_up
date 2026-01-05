@@ -17,7 +17,7 @@ config :heads_up, HeadsUp.Repo,
 # you can enable the server option below.
 config :heads_up, HeadsUpWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
-  secret_key_base: "4PD/1jY8FjlUl8m2XyVmtIx7E+3CsO1UBMUoVs7UbJsJfZ4hmv1indZCd5pRcf64",
+  secret_key_base: "NQ2J20zSkTL7QPYYurb+EncDqiczP/2u2AUNGYEge707ed2rekBxznbum2PX6qpy",
   server: false
 
 # In test we don't send emails

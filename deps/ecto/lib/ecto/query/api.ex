@@ -164,7 +164,7 @@ defmodule Ecto.Query.API do
             )
           )
 
-  This is best used in conjunction with `parent_as/1` to correlate the subquery
+  This is best used in conjunction with `parent_as` to correlate the subquery
   with the parent query to test some condition on related rows in a different table.
   In the above example the query returns posts which have at least one comment that
   has more than 5 replies.
@@ -399,33 +399,28 @@ defmodule Ecto.Query.API do
 
       fragment("lower(?)", p.title) == type(^title, :string)
 
-  ## Identifiers and Constants
+  ## Literals
 
-  Sometimes you need to interpolate an identifier or a constant value into a fragment,
-  instead of a query parameter. The latter can happen if your database does not allow
-  parameterizing certain clauses. For example:
+  Sometimes you need to interpolate a literal value into a fragment,
+  instead of a parameter. For example, you may need to pass a table
+  name or a collation, such as:
 
       collation = "es_ES"
       fragment("? COLLATE ?", ^name, ^collation)
 
-      limit = "10"
-      "posts" |> select([p], p.title) |> limit(fragment("?", ^limit))
+  The example above won't work because `collation` will be passed
+  as a parameter, while it has to be a literal part of the query.
 
-  The first example above won't work because `collation` needs to be quoted as an identifier. 
-  The second example won't work on databases that do not allow passing query parameters
-  as part of `limit`.
+  You can address this by telling Ecto that variable is a literal:
 
-  You can address this by telling Ecto to treat these values differently than a query parameter:
+      fragment("? COLLATE ?", ^name, literal(^collation))
 
-      fragment("? COLLATE ?", ^name, identifier(^collation))
-      "posts" |> select([p], p.title) |> limit(fragment("?", ^constant(limit))
+  Ecto will then escape it and make it part of the query.
 
-  Ecto will make these values directly part of the query, handling quoting and escaping where necessary.
-
-  > #### Query caching {: .warning}
+  > #### Literals and query caching {: .warning}
   >
-  > Because identifiers and constants are made part of the query, each different
-  > value will generate a separate query, with its own cache.
+  > Because literals are made part of the query, each interpolated
+  > literal will generate a separate query, with its own cache.
 
   ## Splicing
 
@@ -485,36 +480,17 @@ defmodule Ecto.Query.API do
   def fragment(fragments), do: doc!([fragments])
 
   @doc """
-  Allows a dynamic identifier to be injected into a fragment:
+  Allows a literal identifier to be injected into a fragment:
 
       collation = "es_ES"
-      select("posts", [p], fragment("? COLLATE ?", p.title, identifier(^collation)))
+      fragment("? COLLATE ?", ^name, literal(^collation))
 
-  The example above will inject the value of `collation` directly
-  into the query instead of treating it as a query parameter. It will
-  generate a query such as `SELECT p0.title COLLATE "es_ES" FROM "posts" AS p0`
-  as opposed to `SELECT p0.title COLLATE $1 FROM "posts" AS p0`.
-
-  Note that each different value of `collation` will emit a different query,
+  The example above will inject `collation` into the query as
+  a literal identifier instead of a query parameter. Note that
+  each different value of `collation` will emit a different query,
   which will be independently prepared and cached.
   """
-  def identifier(binary), do: doc!([binary])
-
-  @doc """
-  Allows a dynamic string or number to be injected into a fragment:
-
-      limit = 10
-      "posts" |> select([p], p.title) |> limit(fragment("?", constant(^limit)))
-
-  The example above will inject the value of `limit` directly
-  into the query instead of treating it as a query parameter. It will
-  generate a query such as `SELECT p0.title FROM "posts" AS p0 LIMIT 1`
-  as opposed to `SELECT p0.title FROM "posts" AS p0 LIMIT $1`.
-
-  Note that each different value of `limit` will emit a different query,
-  which will be independently prepared and cached.
-  """
-  def constant(value), do: doc!([value])
+  def literal(binary), do: doc!([binary])
 
   @doc """
   Allows a list argument to be spliced into a fragment.
@@ -528,7 +504,7 @@ defmodule Ecto.Query.API do
   You may only splice runtime values. For example, this would not work because
   query bindings are compile-time constructs:
 
-      from p in Post, where: fragment("concat(?)", splice(^[p.count, " ", "count"]))
+      from p in Post, where: fragment("concat(?)", splice(^[p.count, " ", "count"])
   """
   def splice(list), do: doc!([list])
 
@@ -542,30 +518,16 @@ defmodule Ecto.Query.API do
   An error is raised if the list is empty or if every map does not have exactly the
   same fields.
 
-  The second argument is either a map of types or an Ecto schema containing all the
-  fields in the first argument.
-
+  The second argument is a map of types corresponding to the fields in the first argument.
   Each field must be given a type or an error is raised. Any type that can be specified in
   a schema may be used.
 
   Queries using a values list are not cacheable by Ecto.
 
-  ## Select with map types example
+  ## Select example
 
       values = [%{id: 1, text: "abc"}, %{id: 2, text: "xyz"}]
       types = %{id: :integer, text: :string}
-
-      query =
-        from v1 in values(values, types),
-          join: v2 in values(values, types),
-          on: v1.id == v2.id
-
-      Repo.all(query)
-
-  ## Select with schema types example
-
-      values = [%{id: 1, text: "abc"}, %{id: 2, text: "xyz"}]
-      types = ValuesSchema
 
       query =
         from v1 in values(values, types),
@@ -603,56 +565,13 @@ defmodule Ecto.Query.API do
   @doc """
   Allows a field to be dynamically accessed.
 
-  The source name can be a binding (`p` in `from p in Post`) or a named binding
-  using `as/1` or `parent_as/1`. The named binding maybe a literal atom or an
-  interpolation.
-
-  The field name can be given as either an atom or a string. In a schemaless
-  query, the two types of names behave the same. However, when referencing
-  a field from a schema the behaviours are different.
-
-  Using an atom to reference a schema field will inherit all the properties from
-  the schema. For example, the field name will be changed to the value of `:source`
-  before generating the final query and its type behaviour will be dictated by the
-  one specified in the schema.
-
-  Using a string to reference a schema field is equivalent to bypassing all of the
-  above and accessing the field directly from the source (i.e. the underlying table).
-  This means the name will not be changed to the value of `:source` and the type
-  behaviour will be dictated by the underlying driver (e.g. Postgrex or MyXQL).
-
-  Take the following schema and query:
-
-      defmodule Car do
-        use Ecto.Schema
-
-        schema "cars" do
-          field :doors, source: :num_doors
-          field :tires, source: :num_tires
-        end
-      end
-
       def at_least_four(doors_or_tires) do
         from c in Car,
           where: field(c, ^doors_or_tires) >= 4
       end
 
-      def at_least_four(query, doors_or_tires) do
-        from q in query,
-          where: field(as(:car), ^doors_or_tires) >= 4
-      end
-
-      def at_least_four(query, binding, doors_or_tires) do
-        from q in query,
-          where: field(as(^binding), ^doors_or_tires) >= 4
-      end
-
-  In the example above, `at_least_four(:doors)` and `at_least_four("num_doors")`
-  would be valid ways to return the set of cars having at least 4 doors.
-
-  String names can be particularly useful when your application is dynamically
-  generating many schemaless queries at runtime and you want to avoid creating
-  a large number of atoms.
+  In the example above, both `at_least_four(:doors)` and `at_least_four(:tires)`
+  would be valid calls as the field is dynamically generated.
   """
   def field(source, field), do: doc!([source, field])
 
@@ -784,18 +703,10 @@ defmodule Ecto.Query.API do
 
       from(post in Post, select: post.meta["tags"][0]["name"])
 
-  Some adapters allow path elements to be references to query source fields
-
-      from(post in Post, select: post.meta[p.title])
-      from(p in Post, join: u in User, on: p.user_id == u.id, select: p.meta[u.name])
-
   Any element of the path can be dynamic:
 
       field = "name"
       from(post in Post, select: post.meta["author"][^field])
-
-      source_field = :source_column
-      from(post in Post, select: post.meta["author"][field(p, ^source_field)])
 
   ## Warning: indexes on PostgreSQL
 
@@ -889,7 +800,7 @@ defmodule Ecto.Query.API do
   @doc """
   Refer to a named atom binding.
 
-  See [Named Bindings](Ecto.Query.html#module-named-bindings) for more information.
+  See the "Named bindings" section in `Ecto.Query` for more information.
   """
   def as(binding), do: doc!([binding])
 
@@ -898,7 +809,7 @@ defmodule Ecto.Query.API do
 
   This is available only inside subqueries.
 
-  See [Named Bindings](Ecto.Query.html#module-named-bindings) for more information.
+  See the "Named bindings" section in `Ecto.Query` for more information.
   """
   def parent_as(binding), do: doc!([binding])
 

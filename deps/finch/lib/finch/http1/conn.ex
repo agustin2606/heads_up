@@ -146,7 +146,6 @@ defmodule Finch.HTTP1.Conn do
                 conn,
                 mint,
                 error,
-                acc,
                 metadata,
                 start_time,
                 extra_measurements
@@ -154,7 +153,7 @@ defmodule Finch.HTTP1.Conn do
           end
 
         {:error, mint, error} ->
-          handle_request_error(conn, mint, error, acc, metadata, start_time, extra_measurements)
+          handle_request_error(conn, mint, error, metadata, start_time, extra_measurements)
       end
     catch
       kind, error ->
@@ -167,10 +166,10 @@ defmodule Finch.HTTP1.Conn do
   defp stream_or_body({:stream, _}), do: :stream
   defp stream_or_body(body), do: body
 
-  defp handle_request_error(conn, mint, error, acc, metadata, start_time, extra_measurements) do
+  defp handle_request_error(conn, mint, error, metadata, start_time, extra_measurements) do
     metadata = Map.put(metadata, :error, error)
     Telemetry.stop(:send, start_time, metadata, extra_measurements)
-    {:error, %{conn | mint: mint}, error, acc}
+    {:error, %{conn | mint: mint}, error}
   end
 
   defp maybe_stream_request_body(mint, ref, {:stream, stream}) do
@@ -202,10 +201,10 @@ defmodule Finch.HTTP1.Conn do
         Telemetry.stop(:recv, start_time, metadata, extra_measurements)
         {:ok, %{conn | mint: mint}, acc}
 
-      {:error, mint, error, acc, resp_metadata} ->
+      {:error, mint, error, resp_metadata} ->
         metadata = Map.merge(metadata, Map.put(resp_metadata, :error, error))
         Telemetry.stop(:recv, start_time, metadata, extra_measurements)
-        {:error, %{conn | mint: mint}, error, acc}
+        {:error, %{conn | mint: mint}, error}
     end
   end
 
@@ -235,7 +234,7 @@ defmodule Finch.HTTP1.Conn do
 
   defp receive_response(
          _,
-         acc,
+         _acc,
          _fun,
          mint,
          _ref,
@@ -244,8 +243,8 @@ defmodule Finch.HTTP1.Conn do
          resp_metadata
        )
        when timeouts.request_timeout < 0 do
-    {:ok, mint} = Mint.HTTP.close(mint)
-    {:error, mint, %Mint.TransportError{reason: :timeout}, acc, resp_metadata}
+    {:ok, mint} = Mint.HTTP1.close(mint)
+    {:error, mint, %Mint.TransportError{reason: :timeout}, resp_metadata}
   end
 
   defp receive_response(
@@ -282,7 +281,7 @@ defmodule Finch.HTTP1.Conn do
         )
 
       {:error, mint, error, _responses} ->
-        {:error, mint, error, acc, resp_metadata}
+        {:error, mint, error, resp_metadata}
     end
   end
 
@@ -312,7 +311,7 @@ defmodule Finch.HTTP1.Conn do
             )
 
           {:halt, acc} ->
-            {:ok, mint} = Mint.HTTP.close(mint)
+            {:ok, mint} = Mint.HTTP1.close(mint)
             {:ok, mint, acc, resp_metadata}
 
           other ->
@@ -336,7 +335,7 @@ defmodule Finch.HTTP1.Conn do
             )
 
           {:halt, acc} ->
-            {:ok, mint} = Mint.HTTP.close(mint)
+            {:ok, mint} = Mint.HTTP1.close(mint)
             {:ok, mint, acc, resp_metadata}
 
           other ->
@@ -358,7 +357,7 @@ defmodule Finch.HTTP1.Conn do
             )
 
           {:halt, acc} ->
-            {:ok, mint} = Mint.HTTP.close(mint)
+            {:ok, mint} = Mint.HTTP1.close(mint)
             {:ok, mint, acc, resp_metadata}
 
           other ->
@@ -366,7 +365,7 @@ defmodule Finch.HTTP1.Conn do
         end
 
       {:error, ^ref, error} ->
-        {:error, mint, error, acc, resp_metadata}
+        {:error, mint, error, resp_metadata}
     end
   end
 end

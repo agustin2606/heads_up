@@ -9,27 +9,18 @@ defmodule HeadsUp.Incidents.Incident do
     field :description, :string
     field :image_path, :string, default: "/images/placeholder.jpg"
 
+    belongs_to :category, HeadsUp.Categories.Category
+
     timestamps(type: :utc_datetime)
   end
 
-  @spec changeset(
-          {map(),
-           %{
-             optional(atom()) =>
-               atom()
-               | {:array | :assoc | :embed | :in | :map | :parameterized | :supertype | :try,
-                  any()}
-           }}
-          | %{
-              :__struct__ => atom() | %{:__changeset__ => any(), optional(any()) => any()},
-              optional(atom()) => any()
-            },
-          :invalid | %{optional(:__struct__) => none(), optional(atom() | binary()) => any()}
-        ) :: Ecto.Changeset.t()
   @doc false
   def changeset(incident, attrs) do
     incident
-    |> cast(attrs, [:name, :description, :priority, :status, :image_path])
-    |> validate_required([:name, :description, :priority, :status, :image_path])
+    |> cast(attrs, [:name, :description, :priority, :status, :image_path, :category_id])
+    |> validate_required([:name, :description, :priority, :status, :image_path, :category_id])
+    |> validate_length(:description, min: 10)
+    |> validate_inclusion(:priority, 1..3)
+    |> assoc_constraint(:category)
   end
 end
