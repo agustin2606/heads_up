@@ -15,29 +15,31 @@ defmodule Bandit.HTTP2.Connection do
             recv_window_size: 65_535,
             streams: %Bandit.HTTP2.StreamCollection{},
             pending_sends: [],
-            transport_info: nil,
+            conn_data: nil,
             telemetry_span: nil,
             plug: nil,
-            opts: %{}
+            opts: %{},
+            reset_stream_timestamps: []
 
   @typedoc "Encapsulates the state of an HTTP/2 connection"
   @type t :: %__MODULE__{
           local_settings: Bandit.HTTP2.Settings.t(),
           remote_settings: Bandit.HTTP2.Settings.t(),
           fragment_frame: Bandit.HTTP2.Frame.Headers.t() | nil,
-          send_hpack_state: HPAX.Table.t(),
-          recv_hpack_state: HPAX.Table.t(),
+          send_hpack_state: term(),
+          recv_hpack_state: term(),
           send_window_size: non_neg_integer(),
           recv_window_size: non_neg_integer(),
           streams: Bandit.HTTP2.StreamCollection.t(),
           pending_sends: [{Bandit.HTTP2.Stream.stream_id(), iodata(), boolean(), fun()}],
-          transport_info: Bandit.TransportInfo.t(),
+          conn_data: Bandit.Pipeline.conn_data(),
           telemetry_span: ThousandIsland.Telemetry.t(),
           plug: Bandit.Pipeline.plug_def(),
           opts: %{
             required(:http) => Bandit.http_options(),
             required(:http_2) => Bandit.http_2_options()
-          }
+          },
+          reset_stream_timestamps: [integer()]
         }
 
   @spec init(ThousandIsland.Socket.t(), Bandit.Pipeline.plug_def(), map()) :: t()
@@ -45,14 +47,14 @@ defmodule Bandit.HTTP2.Connection do
     connection = %__MODULE__{
       local_settings:
         struct!(Bandit.HTTP2.Settings, Keyword.get(opts.http_2, :default_local_settings, [])),
-      transport_info: Bandit.TransportInfo.init(socket),
+      conn_data: Bandit.SocketHelpers.conn_data(socket),
       telemetry_span: ThousandIsland.Socket.telemetry_span(socket),
       plug: plug,
       opts: opts
     }
 
     # Send SETTINGS frame per RFC9113§3.4
-    %Bandit.HTTP2.Frame.Settings{ack: false, settings: connection.local_settings}
+    %Bandit.HTTP2.Frame.Settings{ack: false, settings: Map.from_struct(connection.local_settings)}
     |> send_frame(socket, connection)
 
     connection
@@ -98,15 +100,19 @@ defmodule Bandit.HTTP2.Connection do
 
   def handle_frame(%Bandit.HTTP2.Frame.Settings{ack: false} = frame, socket, connection) do
     %Bandit.HTTP2.Frame.Settings{ack: true} |> send_frame(socket, connection)
-    send_hpack_state = HPAX.resize(connection.send_hpack_state, frame.settings.header_table_size)
-    delta = frame.settings.initial_window_size - connection.remote_settings.initial_window_size
+
+    # Merge whatever new settings were sent with our existing remote settings
+    remote_settings = struct(connection.remote_settings, frame.settings)
+
+    send_hpack_state = HPAX.resize(connection.send_hpack_state, remote_settings.header_table_size)
+    delta = remote_settings.initial_window_size - connection.remote_settings.initial_window_size
 
     Bandit.HTTP2.StreamCollection.get_pids(connection.streams)
     |> Enum.each(&Bandit.HTTP2.Stream.deliver_send_window_update(&1, delta))
 
     do_pending_sends(socket, %{
       connection
-      | remote_settings: frame.settings,
+      | remote_settings: remote_settings,
         send_hpack_state: send_hpack_state
     })
   end
@@ -198,6 +204,7 @@ defmodule Bandit.HTTP2.Connection do
       end)
 
     %{connection | streams: streams}
+    |> check_reset_stream_rate_limit!()
   end
 
   # Catch-all handler for unknown frame types
@@ -218,30 +225,28 @@ defmodule Bandit.HTTP2.Connection do
         connection.streams
 
       :new ->
-        if accept_stream?(connection) do
-          stream =
-            Bandit.HTTP2.Stream.init(
-              self(),
-              stream_id,
-              connection.remote_settings.initial_window_size,
-              connection.transport_info
-            )
+        new_stream!(connection, stream_id)
 
-          case Bandit.HTTP2.StreamProcess.start_link(
-                 stream,
-                 connection.plug,
-                 connection.telemetry_span,
-                 connection.opts
-               ) do
-            {:ok, pid} ->
-              streams = Bandit.HTTP2.StreamCollection.insert(connection.streams, stream_id, pid)
-              with_stream(%{connection | streams: streams}, stream_id, fun)
+        stream =
+          Bandit.HTTP2.Stream.init(
+            self(),
+            stream_id,
+            connection.remote_settings.initial_window_size
+          )
 
-            _ ->
-              raise "Unable to start stream process"
-          end
-        else
-          connection_error!("Connection count exceeded", Bandit.HTTP2.Errors.refused_stream())
+        case Bandit.HTTP2.StreamProcess.start_link(
+               stream,
+               connection.plug,
+               connection.telemetry_span,
+               connection.conn_data,
+               connection.opts
+             ) do
+          {:ok, pid} ->
+            streams = Bandit.HTTP2.StreamCollection.insert(connection.streams, stream_id, pid)
+            with_stream(%{connection | streams: streams}, stream_id, fun)
+
+          _ ->
+            raise "Unable to start stream process"
         end
 
       :invalid ->
@@ -249,17 +254,59 @@ defmodule Bandit.HTTP2.Connection do
     end
   end
 
-  defp accept_stream?(connection) do
+  defp new_stream!(connection, stream_id) do
     max_requests = Keyword.get(connection.opts.http_2, :max_requests, 0)
 
-    max_requests == 0 ||
-      Bandit.HTTP2.StreamCollection.stream_count(connection.streams) < max_requests
+    if max_requests != 0 and
+         max_requests <= Bandit.HTTP2.StreamCollection.stream_count(connection.streams) do
+      connection_error!("Connection count exceeded", Bandit.HTTP2.Errors.refused_stream())
+    end
+
+    if connection.local_settings.max_concurrent_streams <=
+         Bandit.HTTP2.StreamCollection.open_stream_count(connection.streams) do
+      stream_error!(
+        "Concurrent stream count exceeded",
+        stream_id,
+        Bandit.HTTP2.Errors.refused_stream()
+      )
+    end
   end
 
   defp check_oversize_fragment!(fragment, connection) do
     if byte_size(fragment) > Keyword.get(connection.opts.http_2, :max_header_block_size, 50_000),
       do: connection_error!("Received overlong headers")
   end
+
+  @spec check_reset_stream_rate_limit!(t()) :: t()
+  defp check_reset_stream_rate_limit!(connection) do
+    case Keyword.get(connection.opts.http_2, :max_reset_stream_rate, {500, 10_000}) do
+      nil ->
+        connection
+
+      {intensity, period} ->
+        now = :erlang.monotonic_time(:millisecond)
+        threshold = now - period
+        resets = connection.reset_stream_timestamps
+        recent_timestamps = can_reset(intensity - 1, threshold, resets, [], intensity, period)
+        %{connection | reset_stream_timestamps: [now | recent_timestamps]}
+    end
+  end
+
+  defp can_reset(_, _, [], acc, _, _),
+    do: :lists.reverse(acc)
+
+  defp can_reset(_, threshold, [restart | _], acc, _, _) when restart < threshold,
+    do: :lists.reverse(acc)
+
+  defp can_reset(0, _, [_ | _], _acc, intensity, period),
+    do:
+      connection_error!(
+        "Stream resets rate exceeded #{intensity} resets in #{period}ms",
+        Bandit.HTTP2.Errors.enhance_your_calm()
+      )
+
+  defp can_reset(n, threshold, [restart | restarts], acc, intensity, period),
+    do: can_reset(n - 1, threshold, restarts, [restart | acc], intensity, period)
 
   # Shared logic to send any pending frames upon adjustment of our send window
   defp do_pending_sends(socket, connection) do
@@ -395,6 +442,19 @@ defmodule Bandit.HTTP2.Connection do
   @spec connection_error!(term(), Bandit.HTTP2.Errors.error_code()) :: no_return()
   defp connection_error!(message, error_code \\ Bandit.HTTP2.Errors.protocol_error()) do
     raise Bandit.HTTP2.Errors.ConnectionError, message: message, error_code: error_code
+  end
+
+  @spec stream_error!(
+          String.t(),
+          Bandit.HTTP2.Stream.stream_id(),
+          Bandit.HTTP2.Errors.error_code()
+        ) ::
+          no_return()
+  defp stream_error!(message, stream_id, error_code) do
+    raise Bandit.HTTP2.Errors.StreamError,
+      message: message,
+      error_code: error_code,
+      stream_id: stream_id
   end
 
   defp send_frame(frame, socket, connection) do

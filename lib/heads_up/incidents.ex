@@ -17,14 +17,6 @@ defmodule HeadsUp.Incidents do
     |> Repo.all()
   end
 
-  defp with_category(query, slug) when slug in [nil, ""], do: query
-
-  defp with_category(query, slug) do
-    from i in query,
-      join: c in assoc(i, :category),
-      where: c.slug == ^slug
-  end
-
   defp with_status(query, status)
        when status in ~w(pending resolved canceled) do
     where(query, status: ^status)
@@ -36,6 +28,14 @@ defmodule HeadsUp.Incidents do
 
   defp search_by(query, q) do
     where(query, [i], ilike(i.name, ^"%#{q}%"))
+  end
+
+  defp with_category(query, slug) when slug in ["", nil], do: query
+
+  defp with_category(query, slug) do
+    from i in query,
+      join: c in assoc(i, :category),
+      where: c.slug == ^slug
   end
 
   defp sort(query, "name") do
@@ -62,7 +62,7 @@ defmodule HeadsUp.Incidents do
 
   def get_incident!(id) do
     Repo.get!(Incident, id)
-    |> Repo.preload(:category)
+    |> Repo.preload([:category, heroic_response: :user])
   end
 
   def urgent_incidents(incident) do
@@ -74,5 +74,21 @@ defmodule HeadsUp.Incidents do
     |> order_by(asc: :priority)
     |> limit(3)
     |> Repo.all()
+  end
+
+  def list_responses(incident) do
+    incident
+    |> Ecto.assoc(:responses)
+    |> preload(:user)
+    |> order_by(desc: :inserted_at)
+    |> Repo.all()
+  end
+
+  def subscribe(incident_id) do
+    Phoenix.PubSub.subscribe(HeadsUp.PubSub, "incident:#{incident_id}")
+  end
+
+  def broadcast(incident_id, message) do
+    Phoenix.PubSub.broadcast(HeadsUp.PubSub, "incident:#{incident_id}", message)
   end
 end

@@ -1,3 +1,43 @@
+## 1.4.3 (12 Dec 2025)
+
+### Enhancements
+
+* Add support for setting process labels for better observer visibility (#188, thanks @NelsonVides and @nathanl!)
+* Improve memory usage and performance (#181 & #182, thanks @NelsonVides!)
+
+## 1.4.2 (19 Oct 2025)
+
+### Changes
+
+* Resolve compiler warnings in Elixir 1.19 (#171, thanks @psantos10!)
+
+## 1.4.1 (4 Sept 2025)
+
+### Enhancements
+
+* Improve performance of SSL sendfile function on larger files (#176, thanks @NelsonVides!)
+
+## 1.4.0 (22 Aug 2025)
+
+### Enhancements
+
+* Add `num_listen_sockets` parameter to allow for improved performance on
+specific systems (#174, thanks @NelsonVides!)
+
+## 1.3.14 (25 May 2025)
+
+### Enhancements
+
+* Add support for `ThousandIsland.Socket.connection_information/1` to get info
+about the underlying SSL connection, if one is present.
+
+## 1.3.13 (29 Apr 2025)
+
+### Enhancements
+
+* Allow `handle_connection` and `handle_data` callbacks to return tuples to call
+  `handle_continue` per GenServer conventions (#166)
+
 ## 1.3.12 (21 Mar 2025)
 
 ### Fixes

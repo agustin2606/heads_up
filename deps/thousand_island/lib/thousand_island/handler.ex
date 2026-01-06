@@ -157,9 +157,9 @@ defmodule ThousandIsland.Handler do
   conventional `GenServer.on_start()` style tuple. Note that this newly created process is not
   passed the connection socket immediately.
   2. The raw `t:ThousandIsland.Transport.socket()` socket will be passed to the new process via a
-  message of the form `{:thousand_island_ready, raw_socket, server_config, acceptor_span,
+  message of the form `{:thousand_island_ready, raw_socket, handler_config, acceptor_span,
   start_time}`.
-  3. Your implenentation must turn this into a `to:ThousandIsland.Socket.t()` socket by using the
+  3. Your implementation must turn this into a `to:ThousandIsland.Socket.t()` socket by using the
   `ThousandIsland.Socket.new/3` call.
   4. Your implementation must then call `ThousandIsland.Socket.handshake/1` with the socket as the
   sole argument in order to finalize the setup of the socket.
@@ -186,10 +186,10 @@ defmodule ThousandIsland.Handler do
   @typedoc "The value returned by `c:handle_connection/2` and `c:handle_data/3`"
   @type handler_result ::
           {:continue, state :: term()}
-          | {:continue, state :: term(), timeout_options()}
+          | {:continue, state :: term(), timeout_options() | {:continue, term()}}
           | {:switch_transport, {module(), upgrade_opts :: [term()]}, state :: term()}
           | {:switch_transport, {module(), upgrade_opts :: [term()]}, state :: term(),
-             timeout_options()}
+             timeout_options() | {:continue, term()}}
           | {:close, state :: term()}
           | {:error, term(), state :: term()}
 
@@ -212,6 +212,9 @@ defmodule ThousandIsland.Handler do
   is received. In order to set a persistent timeout for all future messages (essentially
   overwriting the value of `read_timeout` that was set at server startup), a value of
   `{:persistent, timeout}` may be returned.
+  * Returning `{:continue, state, {:continue, continue}}` is identical to the previous case with the
+  addition of a `c:GenServer.handle_continue/2` callback being made immediately after, in line with
+  similar behaviour on `GenServer` callbacks.
   * Returning `{:switch_transport, {module, opts}, state}` will cause Thousand Island to try switching the transport of the
   current socket. The `module` should be an Elixir module that implements the `ThousandIsland.Transport` behaviour.
   Thousand Island will call `c:ThousandIsland.Transport.upgrade/2` for the given module to upgrade the transport in-place.
@@ -243,6 +246,9 @@ defmodule ThousandIsland.Handler do
   is received. In order to set a persistent timeout for all future messages (essentially
   overwriting the value of `read_timeout` that was set at server startup), a value of
   `{:persistent, timeout}` may be returned.
+  * Returning `{:continue, state, {:continue, continue}}` is identical to the previous case with the
+  addition of a `c:GenServer.handle_continue/2` callback being made immediately after, in line with
+  similar behaviour on `GenServer` callbacks.
   * Returning `{:error, reason, state}` will cause Thousand Island to close the socket & call the `c:handle_error/3` callback to
   allow final cleanup to be done.
   """
@@ -340,20 +346,22 @@ defmodule ThousandIsland.Handler do
 
       @impl true
       def handle_info(
-            {:thousand_island_ready, raw_socket, server_config, acceptor_span, start_time},
+            {:thousand_island_ready, raw_socket, handler_config, acceptor_span, start_time},
             {nil, state}
           ) do
         {ip, port} =
-          case server_config.transport_module.peername(raw_socket) do
+          case handler_config.transport_module.peername(raw_socket) do
             {:ok, remote_info} ->
               remote_info
 
             {:error, reason} ->
               # the socket has been prematurely closed by the client, we can't do anything with it
               # so we just close the socket, stop the GenServer with the error reason and move on.
-              _ = server_config.transport_module.close(raw_socket)
+              _ = handler_config.transport_module.close(raw_socket)
               throw({:stop, {:shutdown, {:premature_conn_closing, reason}}, {raw_socket, state}})
           end
+
+        ThousandIsland.ProcessLabel.set(:connection, handler_config, {ip, port})
 
         span_meta = %{remote_address: ip, remote_port: port}
 
@@ -365,7 +373,7 @@ defmodule ThousandIsland.Handler do
             span_meta
           )
 
-        socket = ThousandIsland.Socket.new(raw_socket, server_config, connection_span)
+        socket = ThousandIsland.Socket.new(raw_socket, handler_config, connection_span)
         ThousandIsland.Telemetry.span_event(connection_span, :ready)
 
         case ThousandIsland.Socket.handshake(socket) do
@@ -513,9 +521,12 @@ defmodule ThousandIsland.Handler do
     measurements =
       case ThousandIsland.Socket.getstat(socket) do
         {:ok, stats} ->
-          stats
-          |> Keyword.take([:send_oct, :send_cnt, :recv_oct, :recv_cnt])
-          |> Enum.into(%{})
+          %{
+            send_oct: stats[:send_oct],
+            send_cnt: stats[:send_cnt],
+            recv_oct: stats[:recv_oct],
+            recv_cnt: stats[:recv_cnt]
+          }
 
         _ ->
           %{}
@@ -535,6 +546,10 @@ defmodule ThousandIsland.Handler do
         _ = ThousandIsland.Socket.setopts(socket, active: :once)
         {:noreply, {socket, state}, socket.read_timeout}
 
+      {:continue, state, {:continue, continue}} ->
+        _ = ThousandIsland.Socket.setopts(socket, active: :once)
+        {:noreply, {socket, state}, {:continue, continue}}
+
       {:continue, state, {:persistent, timeout}} ->
         socket = %{socket | read_timeout: timeout}
         _ = ThousandIsland.Socket.setopts(socket, active: :once)
@@ -546,6 +561,9 @@ defmodule ThousandIsland.Handler do
 
       {:switch_transport, {module, upgrade_opts}, state} ->
         handle_switch_continuation(socket, module, upgrade_opts, state, socket.read_timeout)
+
+      {:switch_transport, {module, upgrade_opts}, state, {:continue, continue}} ->
+        handle_switch_continuation(socket, module, upgrade_opts, state, {:continue, continue})
 
       {:switch_transport, {module, upgrade_opts}, state, {:persistent, timeout}} ->
         socket = %{socket | read_timeout: timeout}
@@ -569,11 +587,11 @@ defmodule ThousandIsland.Handler do
     end
   end
 
-  defp handle_switch_continuation(socket, module, upgrade_opts, state, timeout) do
+  defp handle_switch_continuation(socket, module, upgrade_opts, state, timeout_or_continue) do
     case ThousandIsland.Socket.upgrade(socket, module, upgrade_opts) do
       {:ok, socket} ->
         _ = ThousandIsland.Socket.setopts(socket, active: :once)
-        {:noreply, {socket, state}, timeout}
+        {:noreply, {socket, state}, timeout_or_continue}
 
       {:error, reason} ->
         {:stop, {:shutdown, {:upgrade, reason}}, {socket, state}}

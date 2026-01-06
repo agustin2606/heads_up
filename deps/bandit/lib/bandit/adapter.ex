@@ -39,7 +39,7 @@ defmodule Bandit.Adapter do
     content_encoding =
       Bandit.Compression.negotiate_content_encoding(
         Bandit.Headers.get_header(headers, "accept-encoding"),
-        Keyword.get(opts.http, :compress, true)
+        opts.http
       )
 
     %__MODULE__{
@@ -128,7 +128,8 @@ defmodule Bandit.Adapter do
       ) do
     validate_calling_process!(adapter)
     start_time = Bandit.Telemetry.monotonic_time()
-    %File.Stat{type: :regular, size: size} = File.stat!(path)
+    {:ok, fileinfo} = :file.read_file_info(path, [:raw, time: :universal])
+    %File.Stat{type: :regular, size: size} = File.Stat.from_record(fileinfo)
     length = if length == :all, do: size - offset, else: length
 
     if offset + length <= size do
@@ -262,11 +263,16 @@ defmodule Bandit.Adapter do
   def push(_adapter, _path, _headers), do: {:error, :not_supported}
 
   @impl Plug.Conn.Adapter
-  def get_peer_data(%__MODULE__{} = adapter) do
-    adapter.transport
-    |> Bandit.HTTPTransport.transport_info()
-    |> Bandit.TransportInfo.peer_data()
-  end
+  def get_peer_data(%__MODULE__{} = adapter),
+    do: Bandit.HTTPTransport.peer_data(adapter.transport)
+
+  @impl Plug.Conn.Adapter
+  def get_sock_data(%__MODULE__{} = adapter),
+    do: Bandit.HTTPTransport.sock_data(adapter.transport)
+
+  @impl Plug.Conn.Adapter
+  def get_ssl_data(%__MODULE__{} = adapter),
+    do: Bandit.HTTPTransport.ssl_data(adapter.transport)
 
   @impl Plug.Conn.Adapter
   def get_http_protocol(%__MODULE__{} = adapter),

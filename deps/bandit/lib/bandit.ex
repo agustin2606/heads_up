@@ -99,10 +99,14 @@ defmodule Bandit do
   * `compress`: Whether or not to attempt compression of responses via content-encoding
     negotiation as described in
     [RFC9110§8.4](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4). Defaults to true
+  * `response_encodings`: A list of compression encodings, expressed in order of preference.
+    Defaults to `~w(deflate gzip x-gzip zstd)`, with `zstd` only being present on platforms which
+    have the zstd library compiled in
   * `deflate_options`: A keyword list of options to set on the deflate library. A complete list can
     be found at `t:deflate_options/0`. Note that these options only affect the behaviour of the
     'deflate' content encoding; 'gzip' does not have any configurable options (this is a
     limitation of the underlying `:zlib` library)
+  * `zstd_options`: A map of options passed verbatim to :zstd, review the options [here](https://www.erlang.org/doc/apps/stdlib/zstd.html#t:compress_parameters/0)
   * `log_exceptions_with_status_codes`: Which exceptions to log. Bandit will log only those
     exceptions whose status codes (as determined by `Plug.Exception.status/1`) match the specified
     list or range. Defaults to `500..599`
@@ -115,7 +119,9 @@ defmodule Bandit do
   """
   @type http_options :: [
           {:compress, boolean()}
+          | {:response_encodings, list()}
           | {:deflate_options, deflate_options()}
+          | {:zstd_options, zstd_options()}
           | {:log_exceptions_with_status_codes, list() | Range.t()}
           | {:log_protocol_errors, :short | :verbose | false}
           | {:log_client_closures, :short | :verbose | false}
@@ -162,6 +168,10 @@ defmodule Bandit do
     continuation frames. Defaults to 50_000 bytes
   * `max_requests`: The maximum number of requests to serve in a single
     HTTP/2 connection before closing the connection. Defaults to 0 (no limit)
+  * `max_reset_stream_rate`: The maximum rate of stream resets (RST_STREAM frames) allowed.
+    Specified as a tuple of `{count, milliseconds}` where `count` is the maximum number of
+    RST_STREAM frames allowed within the time window of `milliseconds`. Defaults to `{500, 10_000}`
+    (500 resets per 10 seconds). Setting this to `nil` disables rate limiting
   * `default_local_settings`: Options to override the default values for local HTTP/2
     settings. Values provided here will override the defaults specified in RFC9113§6.5.2
   """
@@ -169,6 +179,7 @@ defmodule Bandit do
           {:enabled, boolean()}
           | {:max_header_block_size, pos_integer()}
           | {:max_requests, pos_integer()}
+          | {:max_reset_stream_rate, {pos_integer(), pos_integer()} | nil}
           | {:default_local_settings, keyword()}
         ]
 
@@ -185,16 +196,20 @@ defmodule Bandit do
     upgrade requests still need to set the `compress: true` option in `connection_opts` on
     a per-upgrade basis for compression to be negotiated (see 'WebSocket Support' section below
     for details). Defaults to `true`
+  * `deflate_options`: A keyword list of options to set on the deflate library when using the
+    per-message deflate extension. A complete list can be found at `t:deflate_options/0`.
+    `window_bits` is currently ignored and left to negotiation.
   """
   @type websocket_options :: [
           {:enabled, boolean()}
           | {:max_frame_size, pos_integer()}
           | {:validate_text_frames, boolean()}
           | {:compress, boolean()}
+          | {:deflate_options, deflate_options()}
         ]
 
   @typedoc """
-  Options to configure the deflate library used for HTTP compression
+  Options to configure the deflate library used for HTTP and WebSocket compression
   """
   @type deflate_options :: [
           {:level, :zlib.zlevel()}
@@ -202,6 +217,11 @@ defmodule Bandit do
           | {:memory_level, :zlib.zmemlevel()}
           | {:strategy, :zlib.zstrategy()}
         ]
+
+  @typedoc """
+  Options to configure the zstd library used for HTTP compression
+  """
+  @type zstd_options :: map
 
   @typep scheme :: :http | :https
 
@@ -219,10 +239,10 @@ defmodule Bandit do
   end
 
   @top_level_keys ~w(plug scheme port ip keyfile certfile otp_app cipher_suite display_plug startup_log thousand_island_options http_options http_1_options http_2_options websocket_options)a
-  @http_keys ~w(compress deflate_options log_exceptions_with_status_codes log_protocol_errors log_client_closures)a
+  @http_keys ~w(compress response_encodings deflate_options log_exceptions_with_status_codes log_protocol_errors log_client_closures)a
   @http_1_keys ~w(enabled max_request_line_length max_header_length max_header_count max_requests clear_process_dict gc_every_n_keepalive_requests log_unknown_messages)a
-  @http_2_keys ~w(enabled max_header_block_size max_requests default_local_settings)a
-  @websocket_keys ~w(enabled max_frame_size validate_text_frames compress primitive_ops_module)a
+  @http_2_keys ~w(enabled max_header_block_size max_requests max_reset_stream_rate default_local_settings)a
+  @websocket_keys ~w(enabled max_frame_size validate_text_frames compress deflate_options primitive_ops_module)a
   @thousand_island_keys ThousandIsland.ServerConfig.__struct__()
                         |> Map.from_struct()
                         |> Map.keys()

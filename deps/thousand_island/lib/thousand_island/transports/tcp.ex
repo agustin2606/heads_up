@@ -107,7 +107,7 @@ defmodule ThousandIsland.Transports.TCP do
           length :: non_neg_integer()
         ) :: ThousandIsland.Transport.on_sendfile()
   def sendfile(socket, filename, offset, length) do
-    case :file.open(filename, [:raw]) do
+    case :file.open(filename, [:read, :raw, :binary]) do
       {:ok, fd} ->
         try do
           :file.sendfile(fd, socket, offset, length, [])
@@ -162,4 +162,8 @@ defmodule ThousandIsland.Transports.TCP do
   @impl ThousandIsland.Transport
   @spec negotiated_protocol(socket()) :: ThousandIsland.Transport.on_negotiated_protocol()
   def negotiated_protocol(_socket), do: {:error, :protocol_not_negotiated}
+
+  @impl ThousandIsland.Transport
+  @spec connection_information(socket()) :: ThousandIsland.Transport.on_connection_information()
+  def connection_information(_socket), do: {:error, :not_secure}
 end

@@ -4,35 +4,67 @@ defmodule ThousandIsland.Acceptor do
   use Task, restart: :transient
 
   @spec start_link(
-          {server :: Supervisor.supervisor(), parent :: Supervisor.supervisor(),
+          {server :: Supervisor.supervisor(), parent :: Supervisor.supervisor(), pos_integer(),
            ThousandIsland.ServerConfig.t()}
         ) :: {:ok, pid()}
   def start_link(arg), do: Task.start_link(__MODULE__, :run, [arg])
 
   @spec run(
-          {server :: Supervisor.supervisor(), parent :: Supervisor.supervisor(),
+          {server :: Supervisor.supervisor(), parent :: Supervisor.supervisor(), pos_integer(),
            ThousandIsland.ServerConfig.t()}
         ) :: no_return
-  def run({server_pid, parent_pid, %ThousandIsland.ServerConfig{} = server_config}) do
+  def run({server_pid, parent_pid, acceptor_id, %ThousandIsland.ServerConfig{} = server_config}) do
+    ThousandIsland.ProcessLabel.set(:acceptor, server_config, acceptor_id)
+
     listener_pid = ThousandIsland.Server.listener_pid(server_pid)
-    {listener_socket, listener_span} = ThousandIsland.Listener.acceptor_info(listener_pid)
+
+    {listener_socket, listener_span} =
+      ThousandIsland.Listener.acceptor_info(listener_pid, acceptor_id)
+
     connection_sup_pid = ThousandIsland.AcceptorSupervisor.connection_sup_pid(parent_pid)
     acceptor_span = ThousandIsland.Telemetry.start_child_span(listener_span, :acceptor)
-    accept(listener_socket, connection_sup_pid, server_config, acceptor_span, 0)
+
+    # Pre-create the handler config once to avoid Map.take on every connection (hot path)
+    handler_config = ThousandIsland.HandlerConfig.from_server_config(server_config)
+
+    accept(listener_socket, connection_sup_pid, server_config, handler_config, acceptor_span, 0)
   end
 
-  defp accept(listener_socket, connection_sup_pid, server_config, span, count) do
+  defp accept(listener_socket, connection_sup_pid, server_config, handler_config, span, count) do
     with {:ok, socket} <- server_config.transport_module.accept(listener_socket),
-         :ok <- ThousandIsland.Connection.start(connection_sup_pid, socket, server_config, span) do
-      accept(listener_socket, connection_sup_pid, server_config, span, count + 1)
+         :ok <-
+           ThousandIsland.Connection.start(
+             connection_sup_pid,
+             socket,
+             server_config,
+             handler_config,
+             span
+           ) do
+      accept(listener_socket, connection_sup_pid, server_config, handler_config, span, count + 1)
     else
       {:error, :too_many_connections} ->
         ThousandIsland.Telemetry.span_event(span, :spawn_error)
-        accept(listener_socket, connection_sup_pid, server_config, span, count + 1)
+
+        accept(
+          listener_socket,
+          connection_sup_pid,
+          server_config,
+          handler_config,
+          span,
+          count + 1
+        )
 
       {:error, reason} when reason in [:econnaborted, :einval] ->
         ThousandIsland.Telemetry.span_event(span, reason)
-        accept(listener_socket, connection_sup_pid, server_config, span, count + 1)
+
+        accept(
+          listener_socket,
+          connection_sup_pid,
+          server_config,
+          handler_config,
+          span,
+          count + 1
+        )
 
       {:error, :closed} ->
         ThousandIsland.Telemetry.stop_span(span, %{connections: count})
